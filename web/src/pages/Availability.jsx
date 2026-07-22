@@ -1,0 +1,166 @@
+import React, { useEffect, useState } from "react";
+import { api } from "../api.js";
+import { DAY_NAMES, DAY_SHORT, fmtDate } from "../util.js";
+
+const blankWeek = () =>
+  DAY_NAMES.map((_, i) => ({
+    day_of_week: i,
+    is_available: false,
+    available_from: "08:00",
+    available_to: "17:00",
+    note: "",
+  }));
+
+export default function Availability({ me, notify }) {
+  const [week, setWeek] = useState(blankWeek());
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [timeOff, setTimeOff] = useState([]);
+  const [form, setForm] = useState({ start_date: "", end_date: "", note: "" });
+
+  const load = () => {
+    api("/availability").then((d) => {
+      const w = blankWeek();
+      for (const row of d.availability) {
+        w[row.day_of_week] = {
+          day_of_week: row.day_of_week,
+          is_available: row.is_available,
+          available_from: (row.available_from ?? "08:00").slice(0, 5),
+          available_to: (row.available_to ?? "17:00").slice(0, 5),
+          note: row.note ?? "",
+        };
+      }
+      setWeek(w);
+      setDirty(false);
+    }).catch((e) => notify(e.message));
+    api("/unavailability").then((d) => setTimeOff(d.unavailability)).catch(() => {});
+  };
+
+  useEffect(load, []); // eslint-disable-line
+
+  const update = (i, patch) => {
+    setWeek((w) => w.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+    setDirty(true);
+  };
+
+  const save = () => {
+    setSaving(true);
+    const days = week.map((d) => ({
+      day_of_week: d.day_of_week,
+      is_available: d.is_available,
+      available_from: d.is_available ? d.available_from : null,
+      available_to: d.is_available ? d.available_to : null,
+      note: d.note || null,
+    }));
+    api("/availability", { method: "POST", body: { days } })
+      .then(() => {
+        notify("Availability saved.");
+        setDirty(false);
+      })
+      .catch((e) => notify(e.message))
+      .finally(() => setSaving(false));
+  };
+
+  const addTimeOff = () => {
+    if (!form.start_date || !form.end_date) return notify("Pick start and end dates.");
+    if (form.end_date < form.start_date) return notify("End date is before start date.");
+    api("/unavailability", { method: "POST", body: form })
+      .then(() => {
+        notify("Time off added — the roster will show you as away.");
+        setForm({ start_date: "", end_date: "", note: "" });
+        load();
+      })
+      .catch((e) => notify(e.message));
+  };
+
+  const removeTimeOff = (id) => {
+    api(`/unavailability?id=${id}`, { method: "DELETE" })
+      .then(load)
+      .catch((e) => notify(e.message));
+  };
+
+  return (
+    <>
+      <header className="topbar">
+        <h1>Availability</h1>
+        {dirty && (
+          <button className="link-btn" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        )}
+      </header>
+      <div className="page">
+        <div className="card">
+          <h3>My weekly availability</h3>
+          {week.map((d, i) => (
+            <div className="avail-day" key={i}>
+              <span className="dayname">{DAY_SHORT[i]}</span>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={d.is_available}
+                  onChange={(e) => update(i, { is_available: e.target.checked })}
+                />
+                <span className="track" />
+              </label>
+              {d.is_available ? (
+                <span className="avail-times">
+                  <input
+                    type="time"
+                    value={d.available_from}
+                    onChange={(e) => update(i, { available_from: e.target.value })}
+                  />
+                  to
+                  <input
+                    type="time"
+                    value={d.available_to}
+                    onChange={(e) => update(i, { available_to: e.target.value })}
+                  />
+                </span>
+              ) : (
+                <span className="avail-times">Not available</span>
+              )}
+            </div>
+          ))}
+          {dirty && (
+            <div className="row" style={{ marginTop: 12 }}>
+              <button className="btn" onClick={save} disabled={saving}>
+                {saving ? "Saving…" : "Save availability"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <h3>Time off / away</h3>
+          {timeOff.length === 0 && <p className="empty" style={{ padding: "8px 0" }}>No upcoming time off.</p>}
+          {timeOff.map((u) => (
+            <div className="list-row" key={u.id}>
+              <div className="grow">
+                <strong>{fmtDate(u.start_date)}{u.end_date !== u.start_date ? ` – ${fmtDate(u.end_date)}` : ""}</strong>
+                {u.note && <div style={{ color: "var(--muted)", fontSize: 13 }}>{u.note}</div>}
+              </div>
+              <button className="btn small secondary" onClick={() => removeTimeOff(u.id)}>Remove</button>
+            </div>
+          ))}
+          <div className="row" style={{ marginTop: 10 }}>
+            <label className="small">From</label>
+            <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
+            <label className="small">To</label>
+            <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+          </div>
+          <div className="row">
+            <input
+              type="text"
+              placeholder="Reason (optional)"
+              value={form.note}
+              onChange={(e) => setForm({ ...form, note: e.target.value })}
+              style={{ flex: 1 }}
+            />
+            <button className="btn" onClick={addTimeOff}>Add</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
