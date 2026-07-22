@@ -43,6 +43,35 @@ export function fmtDateLong(s) {
   return d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
+const AVATAR_COLORS = [
+  "#6366f1", "#0ea5b7", "#e6739f", "#f59e0b",
+  "#8b5cf6", "#10b981", "#f97362", "#3b82f6",
+];
+
+export function initials(name) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
+
+export function avatarColor(name) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+// split "13:30:00" -> ["1:30", "PM"]
+export function timeParts(t) {
+  if (!t) return ["", ""];
+  const [h, m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return [`${h12}:${String(m).padStart(2, "0")}`, ampm];
+}
+
 export function hoursBetween(start, end) {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);

@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { fmtTime, fmtDate, todayIso, addDays } from "../util.js";
+import Avatar from "../components/Avatar.jsx";
 
 function OfferCard({ o, me, onAction }) {
   const s = o.shift;
   const isMine = o.offered_by === me.id;
+  const roleClass = s.role.name.toLowerCase().includes("mood") ? "role-mood" : "role-centre";
   const badge = {
     open: <span className="badge open">Open</span>,
     pending_approval: <span className="badge pending">Awaiting approval</span>,
@@ -14,21 +16,40 @@ function OfferCard({ o, me, onAction }) {
   }[o.status];
 
   return (
-    <div className="shift-card">
-      <span className="dot" style={{ background: "#f5a623" }} />
-      <div className="grow" style={{ flex: 1 }}>
-        <p className="time">
-          {fmtDate(s.shift_date)} · {fmtTime(s.start_time)} - {fmtTime(s.end_time)}
-        </p>
-        <p className="title">{s.location.name}, {s.role.name}</p>
-        <p className="meta">
-          Offered by {isMine ? "you" : o.offerer.name}
-          {o.acceptor ? ` → ${o.accepted_by === me.id ? "you" : o.acceptor.name}` : ""}
-        </p>
-        {o.offer_note && <p className="meta" style={{ color: "var(--muted)" }}>“{o.offer_note}”</p>}
-        {o.admin_note && <p className="meta" style={{ color: "var(--muted)" }}>Admin: {o.admin_note}</p>}
-        <div className="row" style={{ marginTop: 8 }}>
-          {badge}
+    <div className="offer-card">
+      <div className="offer-top">
+        <div>
+          <div className="offer-when">{fmtDate(s.shift_date)}</div>
+          <div className="offer-shift-line">
+            {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
+          </div>
+          <div className="shift-chips" style={{ marginTop: 6 }}>
+            <span className="chip loc">📍 {s.location.name}</span>
+            <span className={`chip ${roleClass}`}>{s.role.name}</span>
+          </div>
+        </div>
+        {badge}
+      </div>
+
+      <div className="offer-people">
+        <Avatar name={o.offerer.name} size="sm" />
+        <span className="pname">{isMine ? "You" : o.offerer.name}</span>
+        <span className="arrow">→</span>
+        {o.acceptor ? (
+          <>
+            <Avatar name={o.acceptor.name} size="sm" />
+            <span className="pname">{o.accepted_by === me.id ? "You" : o.acceptor.name}</span>
+          </>
+        ) : (
+          <span className="waiting">waiting for someone to take it…</span>
+        )}
+      </div>
+
+      {o.offer_note && <p className="offer-note">“{o.offer_note}”</p>}
+      {o.admin_note && <p className="offer-note">Admin: {o.admin_note}</p>}
+
+      {(o.status === "open" || o.status === "pending_approval") && (
+        <div className="offer-actions">
           {o.status === "open" && !isMine && (
             <button className="btn small green" onClick={() => onAction(o.id, "accept")}>
               Take this shift
@@ -51,7 +72,7 @@ function OfferCard({ o, me, onAction }) {
             </button>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -117,40 +138,45 @@ export default function Offers({ me, notify }) {
   const done = (offers ?? []).filter((o) => ["approved", "rejected", "cancelled"].includes(o.status)).slice(0, 10);
 
   return (
-    <>
+    <div className="plain-page">
       <header className="topbar">
         <h1>Offers</h1>
       </header>
-      <div className="page">
-        {offers === null && <p className="empty">Loading…</p>}
-        {offers !== null && (
-          <>
-            <p className="section-title">Open offers</p>
-            {open.length === 0 && <p className="empty">No open offers. Tap + to offer one of your shifts.</p>}
-            {open.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
 
-            {pending.length > 0 && (
-              <>
-                <p className="section-title">Awaiting approval</p>
-                {pending.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
-              </>
-            )}
+      {offers === null && <p className="empty">Loading…</p>}
+      {offers !== null && (
+        <>
+          <p className="section-title">Open offers</p>
+          {open.length === 0 && (
+            <p className="empty">
+              <span className="big">🤝</span>
+              No open offers. Tap + to offer one of your shifts.
+            </p>
+          )}
+          {open.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
 
-            {done.length > 0 && (
-              <>
-                <p className="section-title">Recent</p>
-                {done.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
-              </>
-            )}
-          </>
-        )}
-      </div>
+          {pending.length > 0 && (
+            <>
+              <p className="section-title">Awaiting approval</p>
+              {pending.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
+            </>
+          )}
+
+          {done.length > 0 && (
+            <>
+              <p className="section-title">Recent</p>
+              {done.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
+            </>
+          )}
+        </>
+      )}
 
       <button className="fab" onClick={openPicker} aria-label="Offer a shift">+</button>
 
       {showPick && (
         <div className="modal-back" onClick={() => setShowPick(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="grab" />
             <h2>Offer a shift for swap</h2>
             {myShifts.length === 0 && (
               <p className="empty">No upcoming shifts available to offer (next 4 weeks).</p>
@@ -161,9 +187,9 @@ export default function Offers({ me, notify }) {
                 className={"offer-shift-pick" + (pickedShift?.id === s.id ? " selected" : "")}
                 onClick={() => setPickedShift(s)}
               >
-                <strong>{fmtDate(s.shift_date)}</strong> · {fmtTime(s.start_time)} - {fmtTime(s.end_time)}
+                <strong>{fmtDate(s.shift_date)}</strong> · {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
                 <br />
-                <span style={{ color: "var(--muted)" }}>{s.location.name}, {s.role.name}</span>
+                <span className="sub">📍 {s.location.name} · {s.role.name}</span>
               </button>
             ))}
             {myShifts.length > 0 && (
@@ -177,7 +203,7 @@ export default function Offers({ me, notify }) {
                     style={{ flex: 1 }}
                   />
                 </div>
-                <div className="row" style={{ marginTop: 12 }}>
+                <div className="row" style={{ marginTop: 14 }}>
                   <button className="btn" disabled={!pickedShift} onClick={submit}>Offer shift</button>
                   <button className="btn secondary" onClick={() => setShowPick(false)}>Cancel</button>
                 </div>
@@ -186,6 +212,6 @@ export default function Offers({ me, notify }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

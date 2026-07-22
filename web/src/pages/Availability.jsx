@@ -80,7 +80,7 @@ export default function Availability({ me, notify }) {
   };
 
   return (
-    <>
+    <div className="plain-page">
       <header className="topbar">
         <h1>Availability</h1>
         {dirty && (
@@ -89,78 +89,83 @@ export default function Availability({ me, notify }) {
           </button>
         )}
       </header>
-      <div className="page">
-        <div className="card">
-          <h3>My weekly availability</h3>
-          {week.map((d, i) => (
-            <div className="avail-day" key={i}>
-              <span className="dayname">{DAY_SHORT[i]}</span>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={d.is_available}
-                  onChange={(e) => update(i, { is_available: e.target.checked })}
-                />
-                <span className="track" />
-              </label>
-              {d.is_available ? (
-                <span className="avail-times">
-                  <input
-                    type="time"
-                    value={d.available_from}
-                    onChange={(e) => update(i, { available_from: e.target.value })}
-                  />
-                  to
-                  <input
-                    type="time"
-                    value={d.available_to}
-                    onChange={(e) => update(i, { available_to: e.target.value })}
-                  />
-                </span>
-              ) : (
-                <span className="avail-times">Not available</span>
-              )}
-            </div>
-          ))}
-          {dirty && (
-            <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn" onClick={save} disabled={saving}>
-                {saving ? "Saving…" : "Save availability"}
-              </button>
-            </div>
-          )}
-        </div>
 
-        <div className="card">
-          <h3>Time off / away</h3>
-          {timeOff.length === 0 && <p className="empty" style={{ padding: "8px 0" }}>No upcoming time off.</p>}
-          {timeOff.map((u) => (
-            <div className="list-row" key={u.id}>
-              <div className="grow">
-                <strong>{fmtDate(u.start_date)}{u.end_date !== u.start_date ? ` – ${fmtDate(u.end_date)}` : ""}</strong>
-                {u.note && <div style={{ color: "var(--muted)", fontSize: 13 }}>{u.note}</div>}
-              </div>
-              <button className="btn small secondary" onClick={() => removeTimeOff(u.id)}>Remove</button>
+      <div className="card">
+        <h3>My weekly availability</h3>
+        {week.map((d, i) => (
+          <div className="avail-day" key={i}>
+            <span className="dayname">{DAY_SHORT[i]}</span>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={d.is_available}
+                onChange={(e) => update(i, { is_available: e.target.checked })}
+              />
+              <span className="track" />
+            </label>
+            {d.is_available ? (
+              <span className="avail-times">
+                <input
+                  type="time"
+                  value={d.available_from}
+                  onChange={(e) => update(i, { available_from: e.target.value })}
+                />
+                –
+                <input
+                  type="time"
+                  value={d.available_to}
+                  onChange={(e) => update(i, { available_to: e.target.value })}
+                />
+              </span>
+            ) : (
+              <span className="avail-times">Not available</span>
+            )}
+          </div>
+        ))}
+        {dirty && (
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="btn" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : "Save availability"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h3>Time off / away</h3>
+        {timeOff.length === 0 && (
+          <p className="empty" style={{ padding: "10px 0" }}>
+            <span className="big">🏖️</span>
+            No upcoming time off.
+          </p>
+        )}
+        {timeOff.map((u) => (
+          <div className="list-row" key={u.id}>
+            <span className="chip away">✈️</span>
+            <div className="grow">
+              <strong>{fmtDate(u.start_date)}{u.end_date !== u.start_date ? ` – ${fmtDate(u.end_date)}` : ""}</strong>
+              {u.note && <div className="sub">{u.note}</div>}
             </div>
-          ))}
-          <div className="row" style={{ marginTop: 10 }}>
-            <label className="small">From</label>
-            <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
-            <label className="small">To</label>
-            <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+            <button className="btn small secondary" onClick={() => removeTimeOff(u.id)}>Remove</button>
           </div>
-          <div className="row">
-            <input
-              type="text"
-              placeholder="Reason (optional)"
-              value={form.note}
-              onChange={(e) => setForm({ ...form, note: e.target.value })}
-              style={{ flex: 1 }}
-            />
-            <button className="btn" onClick={addTimeOff}>Add</button>
-          </div>
+        ))}
+        <div className="row" style={{ marginTop: 12 }}>
+          <label className="small">From</label>
+          <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
+          <label className="small">To</label>
+          <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+        </div>
+        <div className="row">
+          <input
+            type="text"
+            placeholder="Reason (optional)"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            style={{ flex: 1 }}
+          />
+          <button className="btn" onClick={addTimeOff}>Add</button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

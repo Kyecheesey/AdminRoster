@@ -7,28 +7,28 @@ import Offers from "./pages/Offers.jsx";
 import Admin from "./pages/Admin.jsx";
 
 const ICONS = {
-  calendar: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M3 9h18M8 3v4M16 3v4" />
+  calendar: (active) => (
+    <svg viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <rect x="3" y="5" width="18" height="16" rx="3" fillOpacity={active ? 0.15 : 0} />
+      <path d="M3 9.5h18M8 3v4M16 3v4" fill="none" />
     </svg>
   ),
-  availability: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 3" />
+  availability: (active) => (
+    <svg viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <circle cx="12" cy="12" r="9" fillOpacity={active ? 0.15 : 0} />
+      <path d="M12 7v5l3.2 3.2" fill="none" />
     </svg>
   ),
-  offers: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <rect x="3" y="7" width="18" height="13" rx="2" />
-      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" />
+  offers: (active) => (
+    <svg viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <path d="M7 10 3.5 13.5 7 17M17 7l3.5 3.5L17 14" fill="none" />
+      <path d="M3.5 13.5H14M20.5 10.5H10" fill="none" />
     </svg>
   ),
-  admin: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" />
+  admin: (active) => (
+    <svg viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <circle cx="12" cy="8" r="4" fillOpacity={active ? 0.15 : 0} />
+      <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" fill="none" />
     </svg>
   ),
 };
@@ -78,16 +78,14 @@ export default function App() {
         <Admin me={session.staff} notify={notify} onLogout={logout} />
       )}
       {tab !== "admin" && (
-        <div style={{ textAlign: "center", paddingBottom: 12 }}>
-          <button className="link-btn" style={{ color: "#7a7f8c", background: "none", border: "none", fontSize: 13, cursor: "pointer" }} onClick={logout}>
-            Signed in as {session.staff.name} — Sign out
-          </button>
+        <div className="footer-note">
+          <button onClick={logout}>Signed in as {session.staff.name} · Sign out</button>
         </div>
       )}
       <nav className="tabbar">
         {tabs.map((t) => (
           <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}>
-            {ICONS[t.id]}
+            <span className="tab-ic">{ICONS[t.id](tab === t.id)}</span>
             {t.label}
           </button>
         ))}
