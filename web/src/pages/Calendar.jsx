@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
-import { iso, todayIso, parseIso, fmtTime, fmtDateLong, DAY_SHORT } from "../util.js";
+import { iso, todayIso, parseIso, fmtDateLong, DAY_SHORT, dowOf, addDays, hoursBetween } from "../util.js";
 import ShiftCard from "../components/ShiftCard.jsx";
 
 function monthGrid(year, month) {
@@ -68,6 +68,15 @@ export default function Calendar({ me, notify }) {
   );
   const away = awayByDate(selected);
 
+  // my totals for the Mon-Sun week containing the selected day
+  const weekStart = addDays(selected, -dowOf(selected));
+  const weekEnd = addDays(weekStart, 6);
+  const myWeek = data.shifts.filter(
+    (s) => s.staff_id === me.id && s.shift_date >= weekStart && s.shift_date <= weekEnd,
+  );
+  const myWeekHours =
+    Math.round(myWeek.reduce((a, s) => a + hoursBetween(s.start_time.slice(0, 5), s.end_time.slice(0, 5)), 0) * 10) / 10;
+
   const submitOffer = () => {
     api("/offers", { method: "POST", body: { shiftInstanceId: offerShift.id, note: offerNote } })
       .then(() => {
@@ -131,6 +140,16 @@ export default function Calendar({ me, notify }) {
       </div>
 
       <div className="sheet">
+        <div className="stat-strip two">
+          <div className="stat">
+            <div className="v">{myWeek.length}</div>
+            <div className="l">My shifts this week</div>
+          </div>
+          <div className="stat">
+            <div className="v">{myWeekHours}<span className="unit">h</span></div>
+            <div className="l">My hours this week</div>
+          </div>
+        </div>
         <div className="seg">
           <button className={scope === "mine" ? "active" : ""} onClick={() => setScope("mine")}>
             My shifts

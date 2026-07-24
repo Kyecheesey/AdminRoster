@@ -44,8 +44,8 @@ export function fmtDateLong(s) {
 }
 
 const AVATAR_COLORS = [
-  "#6366f1", "#0ea5b7", "#e6739f", "#f59e0b",
-  "#8b5cf6", "#10b981", "#f97362", "#3b82f6",
+  "#0e9884", "#2f7fdb", "#e6739f", "#f59e0b",
+  "#12a150", "#e8795a", "#0ea5b7", "#c98a2e",
 ];
 
 export function initials(name) {
