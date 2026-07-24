@@ -2,7 +2,7 @@ import React from "react";
 import Avatar from "./Avatar.jsx";
 import { timeParts } from "../util.js";
 
-export default function ShiftCard({ shift, isMine, action, subtitle }) {
+export default function ShiftCard({ shift, isMine, action, subtitle, away }) {
   const [st, stAmpm] = timeParts(shift.start_time);
   const [et, etAmpm] = timeParts(shift.end_time);
   const roleClass = shift.role.name.toLowerCase().includes("mood") ? "role-mood" : "role-centre";
@@ -27,6 +27,7 @@ export default function ShiftCard({ shift, isMine, action, subtitle }) {
           <span className="chip loc">📍 {shift.location.name}</span>
           <span className={`chip ${roleClass}`}>{shift.role.name}</span>
           {shift.status === "swapped" && <span className="chip swapped">Swapped in</span>}
+          {away && <span className="chip away">✈️ Away — needs cover</span>}
         </div>
       </div>
       <div className="shift-side">

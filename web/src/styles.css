@@ -41,6 +41,7 @@ button { font-family: inherit; }
 
 .app {
   min-height: 100vh;
+  min-height: 100dvh; /* mobile Safari: track the real visible viewport */
   display: flex;
   flex-direction: column;
   max-width: 560px;
@@ -182,6 +183,7 @@ button { font-family: inherit; }
 /* ================= login ================= */
 .login {
   min-height: 100vh;
+  min-height: 100dvh; /* mobile Safari: track the real visible viewport */
   background:
     radial-gradient(ellipse 90% 40% at 80% -5%, rgba(150, 255, 214, 0.28), transparent),
     radial-gradient(ellipse 70% 35% at 10% 105%, rgba(255, 200, 90, 0.16), transparent),
@@ -479,7 +481,7 @@ select:focus, input:focus { outline: none; border-color: var(--brand-light); bac
 .stat .l { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 2px; }
 
 /* footer signout */
-.footer-note { text-align: center; padding: 4px 0 14px; }
+.footer-note { text-align: center; padding: 4px 0 14px; display: flex; justify-content: center; gap: 16px; }
 .footer-note button {
   color: #9fada7; background: none; border: none; font-size: 12.5px; font-weight: 600; cursor: pointer;
   font-family: inherit;

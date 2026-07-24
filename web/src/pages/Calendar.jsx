@@ -180,11 +180,13 @@ export default function Calendar({ me, notify }) {
         {dayShifts.map((s) => {
           const isMine = s.staff_id === me.id;
           const canOffer = isMine && s.shift_date >= today;
+          const staffAway = away.some((u) => u.staff.id === s.staff_id);
           return (
             <ShiftCard
               key={s.id}
               shift={s}
               isMine={isMine}
+              away={staffAway}
               action={
                 canOffer ? (
                   <button className="btn small secondary" onClick={() => setOfferShift(s)}>

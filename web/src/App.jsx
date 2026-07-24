@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getSession, setSession } from "./api.js";
+import { api, getSession, setSession } from "./api.js";
 import Login from "./pages/Login.jsx";
 import Calendar from "./pages/Calendar.jsx";
 import Availability from "./pages/Availability.jsx";
@@ -34,10 +34,55 @@ const ICONS = {
   ),
 };
 
+function ChangePinModal({ onClose, notify }) {
+  const [pin, setPin] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = () => {
+    if (!/^\d{4}$/.test(pin)) return notify("PIN must be exactly 4 digits.");
+    if (pin !== confirm) return notify("PINs don't match.");
+    setBusy(true);
+    api("/change-pin", { method: "POST", body: { pin } })
+      .then(() => {
+        notify("PIN updated. Use it next time you sign in.");
+        onClose();
+      })
+      .catch((e) => notify(e.message))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="grab" />
+        <h2>Change my PIN</h2>
+        <div className="row">
+          <input
+            type="password" inputMode="numeric" maxLength={4} placeholder="New 4-digit PIN"
+            value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+          />
+          <input
+            type="password" inputMode="numeric" maxLength={4} placeholder="Repeat PIN"
+            value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+        <div className="row" style={{ marginTop: 14 }}>
+          <button className="btn" onClick={submit} disabled={busy}>
+            {busy ? "Saving…" : "Update PIN"}
+          </button>
+          <button className="btn secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSess] = useState(getSession());
   const [tab, setTab] = useState("calendar");
   const [toast, setToast] = useState(null);
+  const [showPin, setShowPin] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -89,6 +134,8 @@ export default function App() {
           <Avatar name={session.staff.name} size="sm" />
           <div className="who">
             <div className="nm">{session.staff.name}</div>
+            <button onClick={() => setShowPin(true)}>Change PIN</button>
+            {" · "}
             <button onClick={logout}>Sign out</button>
           </div>
         </div>
@@ -103,6 +150,7 @@ export default function App() {
         )}
         {tab !== "admin" && (
           <div className="footer-note">
+            <button onClick={() => setShowPin(true)}>Change PIN</button>
             <button onClick={logout}>Signed in as {session.staff.name} · Sign out</button>
           </div>
         )}
@@ -116,6 +164,7 @@ export default function App() {
           </button>
         ))}
       </nav>
+      {showPin && <ChangePinModal onClose={() => setShowPin(false)} notify={notify} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

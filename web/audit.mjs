@@ -117,6 +117,11 @@ async function handle(route) {
   }
   if (p === "/admin/regenerate") return reply({ ok: true });
   if (p === "/admin/staff") return reply({ ok: true });
+  if (p === "/change-pin" && method === "POST") {
+    if (!/^\d{4}$/.test(body.pin ?? "")) return reply({ error: "PIN must be exactly 4 digits" }, 400);
+    state.changedPin = body.pin;
+    return reply({ ok: true });
+  }
   return reply({ error: `unhandled ${method} ${p}` }, 500);
 }
 
@@ -216,7 +221,26 @@ await page.getByRole("button", { name: "Add shift" }).click();
 await page.waitForTimeout(500);
 check("template shift added", state.template.length === 2);
 
-// 10. sign out returns to login
+// 10. change own PIN from footer
+await page.getByRole("button", { name: "Calendar" }).click();
+await page.waitForTimeout(400);
+await page.getByRole("button", { name: "Change PIN", exact: true }).click();
+await page.waitForTimeout(300);
+await page.getByPlaceholder("New 4-digit PIN").fill("5678");
+await page.getByPlaceholder("Repeat PIN").fill("5678");
+await page.getByRole("button", { name: "Update PIN" }).click();
+await page.waitForTimeout(400);
+check("change PIN round-trips", state.changedPin === "5678");
+
+// 11. away chip: Debbie has time off today; her shift should be flagged
+state.unavailability.push({ id: "u9", staff_id: "s4", start_date: todayIso, end_date: todayIso, note: "sick" });
+state.shifts.find((s) => s.id === "sh2").staff_id = "s4"; // restore Debbie on today's shift
+await page.getByRole("button", { name: "Today" }).click();
+await page.getByRole("button", { name: "Everyone" }).click();
+await page.waitForTimeout(600);
+check("away shift flagged as needing cover", await page.getByText("Away — needs cover").first().isVisible());
+
+// 12. sign out returns to login
 await page.getByRole("button", { name: "Sign out" }).click();
 await page.waitForTimeout(400);
 check("sign out returns to name picker", await page.getByText("Who's signing in?").isVisible());
