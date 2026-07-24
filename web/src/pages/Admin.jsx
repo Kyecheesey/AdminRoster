@@ -106,6 +106,7 @@ export default function Admin({ me, notify, onLogout }) {
 
       <p className="section-title">Fixed weekly roster</p>
       {template === null && <p className="empty">Loading…</p>}
+      <div className="cards-grid">
       {template !== null &&
         DAY_NAMES.map((day, dow) => {
           const rows = template.filter((t) => t.day_of_week === dow);
@@ -134,7 +135,9 @@ export default function Admin({ me, notify, onLogout }) {
             </div>
           );
         })}
+      </div>
 
+      <div className="cards-grid">
       <div className="card">
         <h3>Add shift to fixed roster</h3>
         <div className="row">
@@ -177,6 +180,7 @@ export default function Admin({ me, notify, onLogout }) {
         <button className="btn" onClick={applyTemplate} disabled={busy}>
           {busy ? "Applying…" : "Re-apply next 8 weeks"}
         </button>
+      </div>
       </div>
 
       <p className="section-title">Staff</p>

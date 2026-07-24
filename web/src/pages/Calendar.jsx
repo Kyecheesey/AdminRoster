@@ -88,7 +88,7 @@ export default function Calendar({ me, notify }) {
   };
 
   return (
-    <>
+    <div className="cal-wrap">
       <div className="hero">
         <header className="topbar">
           <h1>Calendar</h1>
@@ -219,6 +219,6 @@ export default function Calendar({ me, notify }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

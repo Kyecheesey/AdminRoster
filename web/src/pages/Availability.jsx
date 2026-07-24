@@ -90,6 +90,7 @@ export default function Availability({ me, notify }) {
         )}
       </header>
 
+      <div className="av-grid">
       <div className="card">
         <h3>My weekly availability</h3>
         {week.map((d, i) => (
@@ -165,6 +166,7 @@ export default function Availability({ me, notify }) {
           />
           <button className="btn" onClick={addTimeOff}>Add</button>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import Calendar from "./pages/Calendar.jsx";
 import Availability from "./pages/Availability.jsx";
 import Offers from "./pages/Offers.jsx";
 import Admin from "./pages/Admin.jsx";
+import Avatar from "./components/Avatar.jsx";
 
 const ICONS = {
   calendar: (active) => (
@@ -71,17 +72,42 @@ export default function App() {
 
   return (
     <div className="app">
-      {tab === "calendar" && <Calendar me={session.staff} notify={notify} />}
-      {tab === "availability" && <Availability me={session.staff} notify={notify} />}
-      {tab === "offers" && <Offers me={session.staff} notify={notify} />}
-      {tab === "admin" && session.staff.isAdmin && (
-        <Admin me={session.staff} notify={notify} onLogout={logout} />
-      )}
-      {tab !== "admin" && (
-        <div className="footer-note">
-          <button onClick={logout}>Signed in as {session.staff.name} · Sign out</button>
+      <aside className="sidenav">
+        <div className="side-brand">
+          <span className="mark">📅</span>
+          <span>Admin Roster</span>
         </div>
-      )}
+        <nav className="side-links">
+          {tabs.map((t) => (
+            <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}>
+              {ICONS[t.id](tab === t.id)}
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="side-user">
+          <Avatar name={session.staff.name} size="sm" />
+          <div className="who">
+            <div className="nm">{session.staff.name}</div>
+            <button onClick={logout}>Sign out</button>
+          </div>
+        </div>
+      </aside>
+
+      <main className="main">
+        {tab === "calendar" && <Calendar me={session.staff} notify={notify} />}
+        {tab === "availability" && <Availability me={session.staff} notify={notify} />}
+        {tab === "offers" && <Offers me={session.staff} notify={notify} />}
+        {tab === "admin" && session.staff.isAdmin && (
+          <Admin me={session.staff} notify={notify} onLogout={logout} />
+        )}
+        {tab !== "admin" && (
+          <div className="footer-note">
+            <button onClick={logout}>Signed in as {session.staff.name} · Sign out</button>
+          </div>
+        )}
+      </main>
+
       <nav className="tabbar">
         {tabs.map((t) => (
           <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}>

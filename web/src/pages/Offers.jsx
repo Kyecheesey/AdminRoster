@@ -153,19 +153,25 @@ export default function Offers({ me, notify }) {
               No open offers. Tap + to offer one of your shifts.
             </p>
           )}
-          {open.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
+          <div className="cards-grid">
+            {open.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
+          </div>
 
           {pending.length > 0 && (
             <>
               <p className="section-title">Awaiting approval</p>
-              {pending.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
+              <div className="cards-grid">
+                {pending.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
+              </div>
             </>
           )}
 
           {done.length > 0 && (
             <>
               <p className="section-title">Recent</p>
-              {done.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
+              <div className="cards-grid">
+                {done.map((o) => <OfferCard key={o.id} o={o} me={me} onAction={act} />)}
+              </div>
             </>
           )}
         </>
