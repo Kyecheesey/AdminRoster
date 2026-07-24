@@ -60,6 +60,17 @@ The API base URL is set in `web/src/api.js`. The edge function is deployed with
 `verify_jwt: false` because it implements its own PIN/session auth (see
 `supabase/functions/api/index.ts`).
 
+### End-to-end UI test
+
+`web/audit.mjs` drives the full UI (login, offers, availability, admin) in headless
+Chromium against a stateful mock of the API and asserts each flow:
+
+```bash
+cd web
+npm i -D playwright   # not kept in package.json to keep deploys light
+node audit.mjs
+```
+
 ## Seed data
 
 The initial fixed roster was imported from the "WS 1 June" week of the 2026 roster

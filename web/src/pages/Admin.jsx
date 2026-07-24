@@ -48,7 +48,7 @@ export default function Admin({ me, notify, onLogout }) {
   };
 
   const resetPin = (s) => {
-    const pin = prompt(`New PIN for ${s.name} (4-8 digits):`);
+    const pin = prompt(`New 4-digit PIN for ${s.name}:`);
     if (!pin) return;
     api("/admin/staff", { method: "POST", body: { id: s.id, pin } })
       .then(() => notify(`PIN updated for ${s.name}.`))

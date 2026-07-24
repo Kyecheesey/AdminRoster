@@ -90,15 +90,24 @@ function* dateRange(start: string, end: string): Generator<string> {
 }
 
 // Materialise shift instances from the fixed weekly template for a date window.
+// A template shift materialises at most once per date, keyed by template_id —
+// NOT by who holds it — so a shift that was swapped to someone else is never
+// regenerated for the original person.
 async function ensureInstances(start: string, end: string) {
-  const { data: tpl, error } = await supabase
-    .from("roster_template").select("*").eq("active", true);
-  if (error) throw error;
+  const [tplRes, existingRes] = await Promise.all([
+    supabase.from("roster_template").select("*").eq("active", true),
+    supabase.from("shift_instances").select("template_id, shift_date")
+      .gte("shift_date", start).lte("shift_date", end).not("template_id", "is", null),
+  ]);
+  if (tplRes.error) throw tplRes.error;
+  if (existingRes.error) throw existingRes.error;
+  const have = new Set(existingRes.data!.map((r) => `${r.template_id}|${r.shift_date}`));
   const rows = [];
   for (const date of dateRange(start, end)) {
     const dow = toDow(date);
-    for (const t of tpl!) {
+    for (const t of tplRes.data!) {
       if (t.day_of_week !== dow) continue;
+      if (have.has(`${t.id}|${date}`)) continue;
       rows.push({
         template_id: t.id,
         staff_id: t.staff_id,
@@ -178,7 +187,8 @@ Deno.serve(async (req: Request) => {
 
     if (path === "/change-pin" && req.method === "POST") {
       const { pin } = body;
-      if (!/^\d{4,8}$/.test(pin ?? "")) return json({ error: "PIN must be 4-8 digits" }, 400);
+      // exactly 4 digits: the login keypad auto-submits after the 4th digit
+      if (!/^\d{4}$/.test(pin ?? "")) return json({ error: "PIN must be exactly 4 digits" }, 400);
       const salt = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
       const pin_hash = `${salt}$${await sha256Hex(`${salt}:${pin}`)}`;
       const { error } = await supabase.from("staff").update({ pin_hash }).eq("id", me.sid);
@@ -338,7 +348,12 @@ Deno.serve(async (req: Request) => {
         const { error: shiftErr } = await supabase.from("shift_instances")
           .update({ staff_id: offer.accepted_by, status: "swapped" })
           .eq("id", offer.shift_instance_id);
-        if (shiftErr) throw shiftErr;
+        if (shiftErr) {
+          if (String(shiftErr.code) === "23505") {
+            return json({ error: "The taker already has a shift starting at the same time that day." }, 409);
+          }
+          throw shiftErr;
+        }
         const { error } = await supabase.from("swap_offers")
           .update({ status: "approved", admin_note: body.note ?? null, updated_at: now })
           .eq("id", id);
@@ -402,7 +417,8 @@ Deno.serve(async (req: Request) => {
         if (is_admin !== undefined) patch.is_admin = is_admin;
         if (active !== undefined) patch.active = active;
         if (pin !== undefined) {
-          if (!/^\d{4,8}$/.test(pin)) return json({ error: "PIN must be 4-8 digits" }, 400);
+          // exactly 4 digits: the login keypad auto-submits after the 4th digit
+          if (!/^\d{4}$/.test(pin)) return json({ error: "PIN must be exactly 4 digits" }, 400);
           const salt = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
           patch.pin_hash = `${salt}$${await sha256Hex(`${salt}:${pin}`)}`;
         }
