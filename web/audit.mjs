@@ -10,7 +10,7 @@ const check = (name, cond) => {
 
 // ---------- stateful mock backend ----------
 const staff = [
-  { id: "s1", name: "Director" }, { id: "s2", name: "Gaylin Dally" },
+  { id: "s1", name: "Admin Account" }, { id: "s2", name: "Gaylin Dally" },
   { id: "s3", name: "Cass Reid" }, { id: "s4", name: "Debbie Halsey" },
   { id: "s5", name: "Madelyn Ruel" }, { id: "s6", name: "Momo Segawa" },
   { id: "s7", name: "Carla Lartigau" },

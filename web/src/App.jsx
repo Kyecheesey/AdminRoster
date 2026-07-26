@@ -120,7 +120,7 @@ export default function App() {
       <aside className="sidenav">
         <div className="side-brand">
           <span className="mark">📅</span>
-          <span>Admin Roster</span>
+          <span>The Mood &amp; Mind Centre Admin Roster</span>
         </div>
         <nav className="side-links">
           {tabs.map((t) => (

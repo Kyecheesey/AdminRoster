@@ -36,7 +36,7 @@ export default function Login({ onLogin }) {
     return (
       <div className="login">
         <div className="brandmark">📅</div>
-        <h1>Admin Roster</h1>
+        <h1>The Mood &amp; Mind Centre Admin Roster</h1>
         <p className="subtitle">Who's signing in?</p>
         <div className="name-grid">
           {staff === null && (
