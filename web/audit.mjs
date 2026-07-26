@@ -16,6 +16,8 @@ const staff = [
   { id: "s7", name: "Carla Lartigau" },
 ];
 const byId = Object.fromEntries(staff.map((s) => [s.id, s]));
+const locName = { l1: "Hope Island", l2: "Upper Coomera" };
+const roleName = { r1: "Centre Admin", r2: "Mood Admin" };
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const today = new Date();
 const todayIso = iso(today);
@@ -34,7 +36,7 @@ const state = {
   availability: [0, 1, 2, 3, 4].map((d) => ({ id: `a${d}`, staff_id: "s3", day_of_week: d, is_available: true, available_from: "08:00:00", available_to: "19:00:00", note: null })),
   unavailability: [],
   template: [
-    { id: "t1", day_of_week: 0, start_time: "08:00:00", end_time: "13:00:00", staff: { id: "s3", name: "Cass Reid" }, location: { name: "Hope Island" }, role: { name: "Centre Admin" } },
+    { id: "t1", day_of_week: 0, start_time: "08:00:00", end_time: "13:00:00", staff_id: "s3", location_id: "l1", role_id: "r1", staff: { id: "s3", name: "Cass Reid" }, location: { name: "Hope Island" }, role: { name: "Centre Admin" } },
   ],
   posts: [],
 };
@@ -53,7 +55,7 @@ async function handle(route) {
   const url = new URL(route.request().url());
   const p = url.pathname.replace(/^.*\/api/, "");
   const method = route.request().method();
-  const body = method === "POST" ? JSON.parse(route.request().postData() || "{}") : {};
+  const body = (method === "POST" || method === "PUT") ? JSON.parse(route.request().postData() || "{}") : {};
   const reply = (b, status = 200) => route.fulfill({ status, json: b, headers: { "Access-Control-Allow-Origin": "*" } });
   state.posts.push(`${method} ${p}`);
 
@@ -112,7 +114,21 @@ async function handle(route) {
   });
   if (p === "/admin/template" && method === "GET") return reply({ template: state.template });
   if (p === "/admin/template" && method === "POST") {
-    state.template.push({ id: `t${state.template.length + 1}`, day_of_week: Number(body.day_of_week), start_time: body.start_time + ":00", end_time: body.end_time + ":00", staff: byId[body.staff_id], location: { name: "Hope Island" }, role: { name: "Centre Admin" } });
+    state.template.push({ id: `t${state.template.length + 1}`, day_of_week: Number(body.day_of_week), start_time: body.start_time + ":00", end_time: body.end_time + ":00", staff_id: body.staff_id, location_id: body.location_id, role_id: body.role_id, staff: byId[body.staff_id], location: { name: locName[body.location_id] }, role: { name: roleName[body.role_id] } });
+    return reply({ ok: true });
+  }
+  if (p === "/admin/template" && method === "PUT") {
+    const t = state.template.find((x) => x.id === body.id);
+    if (!t) return reply({ error: "not found" }, 404);
+    Object.assign(t, {
+      day_of_week: Number(body.day_of_week), start_time: body.start_time + ":00", end_time: body.end_time + ":00",
+      staff_id: body.staff_id, location_id: body.location_id, role_id: body.role_id,
+      staff: byId[body.staff_id], location: { name: locName[body.location_id] }, role: { name: roleName[body.role_id] },
+    });
+    return reply({ ok: true });
+  }
+  if (p === "/admin/template" && method === "DELETE") {
+    state.template = state.template.filter((t) => t.id !== url.searchParams.get("id"));
     return reply({ ok: true });
   }
   if (p === "/admin/regenerate") return reply({ ok: true });
@@ -207,19 +223,30 @@ await page.getByRole("button", { name: "Remove" }).first().click();
 await page.waitForTimeout(400);
 check("time off removed", state.unavailability.length === 0);
 
-// 9. admin: add-shift validation then success
+// 9. admin: add a shift via the editor modal
 await page.getByRole("button", { name: "Admin" }).click();
 await page.waitForTimeout(500);
-await page.getByRole("button", { name: "Add shift" }).click();
+await page.getByRole("button", { name: "+ New shift" }).click();
 await page.waitForTimeout(300);
-check("add-shift validation toast", await page.getByText("Pick staff, location and role.").isVisible());
-await page.locator("select").nth(0).selectOption({ label: "Momo Segawa" });
-await page.locator("select").nth(1).selectOption({ label: "Tuesday" });
-await page.locator("select").nth(2).selectOption({ label: "Upper Coomera" });
-await page.locator("select").nth(3).selectOption({ label: "Centre Admin" });
-await page.getByRole("button", { name: "Add shift" }).click();
+const modal = page.locator(".modal");
+check("editor opens on add", await page.getByRole("heading", { name: "Add shift" }).isVisible());
+check("add is disabled until valid", await modal.getByRole("button", { name: "Add shift", exact: true }).isDisabled());
+await modal.locator("select").nth(0).selectOption({ label: "Momo Segawa" });
+await modal.locator("select").nth(1).selectOption({ label: "Tuesday" });
+await modal.locator("select").nth(2).selectOption({ label: "Upper Coomera" });
+await modal.locator("select").nth(3).selectOption({ label: "Centre Admin" });
+await modal.getByRole("button", { name: "Add shift", exact: true }).click();
 await page.waitForTimeout(500);
-check("template shift added", state.template.length === 2);
+check("template shift added", state.template.length === 2 && state.template[1].staff_id === "s6");
+
+// 9b. admin: edit an existing shift's time via the editor (PUT)
+await page.locator(".shift-chip").first().click();
+await page.waitForTimeout(300);
+check("editor opens on edit", await page.getByRole("heading", { name: "Edit shift" }).isVisible());
+await modal.locator('input[type="time"]').nth(1).fill("15:30");
+await modal.getByRole("button", { name: "Save changes" }).click();
+await page.waitForTimeout(500);
+check("template shift edited (PUT)", state.template.find((t) => t.id === "t1").end_time === "15:30:00");
 
 // 10. change own PIN from footer
 await page.getByRole("button", { name: "Calendar" }).click();

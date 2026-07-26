@@ -14,7 +14,7 @@ const SESSION_DAYS = 30;
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type, x-session",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
 };
 
 function json(body: unknown, status = 200): Response {
@@ -143,7 +143,7 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   // path after the function name, e.g. /api/login -> /login
   const path = url.pathname.replace(/^\/api/, "") || "/";
-  const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+  const body = (req.method === "POST" || req.method === "PUT") ? await req.json().catch(() => ({})) : {};
 
   try {
     // ---------- public ----------
@@ -385,8 +385,22 @@ Deno.serve(async (req: Request) => {
 
       if (path === "/admin/template" && req.method === "POST") {
         const { staff_id, day_of_week, start_time, end_time, location_id, role_id } = body;
+        if (!staff_id || !location_id || !role_id) return json({ error: "Staff, location and role are required" }, 400);
+        if (end_time <= start_time) return json({ error: "End time must be after start time" }, 400);
         const { error } = await supabase.from("roster_template")
           .insert({ staff_id, day_of_week, start_time, end_time, location_id, role_id });
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
+      if (path === "/admin/template" && req.method === "PUT") {
+        const { id, staff_id, day_of_week, start_time, end_time, location_id, role_id } = body;
+        if (!id) return json({ error: "Missing shift id" }, 400);
+        if (!staff_id || !location_id || !role_id) return json({ error: "Staff, location and role are required" }, 400);
+        if (end_time <= start_time) return json({ error: "End time must be after start time" }, 400);
+        const { error } = await supabase.from("roster_template")
+          .update({ staff_id, day_of_week, start_time, end_time, location_id, role_id })
+          .eq("id", id);
         if (error) throw error;
         return json({ ok: true });
       }
