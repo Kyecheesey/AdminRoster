@@ -1,18 +1,44 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
 import { DAY_NAMES, fmtTime, todayIso, addDays, hoursBetween } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
 
-const blankShift = { staff_id: "", day_of_week: 0, start_time: "08:00", end_time: "13:00", location_id: "", role_id: "" };
+const blankShift = { id: null, staff_id: "", day_of_week: 0, start_time: "08:00", end_time: "13:00", location_id: "", role_id: "" };
+const hm = (t) => (t ? t.slice(0, 5) : "");
+// two [start,end) time ranges (HH:MM strings) overlap
+const overlaps = (aS, aE, bS, bE) => aS < bE && bS < aE;
+
+// Flag double-books and availability clashes for the shift being edited.
+function shiftWarnings(f, template, availability) {
+  if (!f.staff_id) return [];
+  const dow = Number(f.day_of_week);
+  const out = [];
+  for (const t of template) {
+    if (t.staff_id !== f.staff_id || t.day_of_week !== dow || t.id === f.id) continue;
+    if (overlaps(f.start_time, f.end_time, hm(t.start_time), hm(t.end_time))) {
+      out.push(`Overlaps their ${fmtTime(t.start_time)}–${fmtTime(t.end_time)} shift on ${DAY_NAMES[dow]}.`);
+    }
+  }
+  const a = (availability ?? []).find((x) => x.staff_id === f.staff_id && x.day_of_week === dow);
+  if (a && !a.is_available) {
+    out.push(`Marked unavailable on ${DAY_NAMES[dow]}.`);
+  } else if (a && a.is_available && a.available_from && a.available_to) {
+    if (f.start_time < hm(a.available_from) || f.end_time > hm(a.available_to)) {
+      out.push(`Outside their available hours (${fmtTime(a.available_from)}–${fmtTime(a.available_to)}).`);
+    }
+  }
+  return out;
+}
 
 // Shared add/edit sheet for a single fixed-roster shift.
-function ShiftEditor({ meta, initial, onClose, onSaved, notify }) {
+function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, notify }) {
   const [f, setF] = useState(initial);
   const [busy, setBusy] = useState(false);
-  const isEdit = Boolean(initial.id);
+  const isEdit = Boolean(f.id);
   const set = (patch) => setF((prev) => ({ ...prev, ...patch }));
   const valid = f.staff_id && f.location_id && f.role_id && f.end_time > f.start_time;
   const dur = f.end_time > f.start_time ? hoursBetween(f.start_time, f.end_time) : 0;
+  const warnings = useMemo(() => shiftWarnings(f, template ?? [], availability), [f, template, availability]);
 
   const save = () => {
     if (!f.staff_id || !f.location_id || !f.role_id) return notify("Pick staff, location and role.");
@@ -23,11 +49,11 @@ function ShiftEditor({ meta, initial, onClose, onSaved, notify }) {
       start_time: f.start_time, end_time: f.end_time,
       location_id: f.location_id, role_id: f.role_id,
     };
-    const req = isEdit
-      ? api("/admin/template", { method: "PUT", body: { ...payload, id: initial.id } })
+    const req = f.id
+      ? api("/admin/template", { method: "PUT", body: { ...payload, id: f.id } })
       : api("/admin/template", { method: "POST", body: payload });
     req
-      .then(() => { notify(isEdit ? "Shift updated." : "Shift added to the roster."); onSaved(); })
+      .then(() => { notify(f.id ? "Shift updated." : "Shift added to the roster."); onSaved(); })
       .catch((e) => notify(e.message))
       .finally(() => setBusy(false));
   };
@@ -35,10 +61,15 @@ function ShiftEditor({ meta, initial, onClose, onSaved, notify }) {
   const del = () => {
     if (!confirm("Remove this shift from the fixed weekly roster?")) return;
     setBusy(true);
-    api(`/admin/template?id=${initial.id}`, { method: "DELETE" })
+    api(`/admin/template?id=${f.id}`, { method: "DELETE" })
       .then(() => { notify("Shift removed."); onSaved(); })
       .catch((e) => notify(e.message))
       .finally(() => setBusy(false));
+  };
+
+  const duplicate = () => {
+    set({ id: null });
+    notify("Duplicated — adjust the day or person, then add.");
   };
 
   const active = (meta?.staff ?? []).filter((s) => s.active);
@@ -91,14 +122,23 @@ function ShiftEditor({ meta, initial, onClose, onSaved, notify }) {
           </div>
         </div>
 
+        {warnings.length > 0 && (
+          <div className="editor-warn" role="alert">
+            <strong>⚠ Heads up</strong>
+            <ul>{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+            <span className="tiny">You can still save — this is just a flag.</span>
+          </div>
+        )}
+
         <div className="editor-actions">
           <button className="btn" onClick={save} disabled={busy || !valid}>
             {busy ? "Saving…" : isEdit ? "Save changes" : "Add shift"}
           </button>
           {isEdit && (
-            <button className="btn small secondary" style={{ color: "var(--red)" }} onClick={del} disabled={busy}>
-              Delete
-            </button>
+            <>
+              <button className="btn small secondary" onClick={duplicate} disabled={busy}>Duplicate</button>
+              <button className="btn small secondary" style={{ color: "var(--red)" }} onClick={del} disabled={busy}>Delete</button>
+            </>
           )}
           <span className="grow" />
           <button className="btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
@@ -111,6 +151,7 @@ function ShiftEditor({ meta, initial, onClose, onSaved, notify }) {
 export default function Admin({ me, notify, onLogout }) {
   const [meta, setMeta] = useState(null);
   const [template, setTemplate] = useState(null);
+  const [availability, setAvailability] = useState([]);
   const [editing, setEditing] = useState(null); // shift editor payload, or null
   const [staffForm, setStaffForm] = useState({ name: "", pin: "", contract_hours: 0 });
   const [busy, setBusy] = useState(false);
@@ -118,13 +159,14 @@ export default function Admin({ me, notify, onLogout }) {
   const load = () => {
     api("/meta").then(setMeta).catch((e) => notify(e.message));
     api("/admin/template").then((d) => setTemplate(d.template)).catch((e) => notify(e.message));
+    api("/availability?all=1").then((d) => setAvailability(d.availability ?? [])).catch(() => {});
   };
   useEffect(load, []); // eslint-disable-line
 
   const openNew = (dow = 0) => setEditing({ ...blankShift, day_of_week: dow });
   const openEdit = (t) => setEditing({
     id: t.id, staff_id: t.staff_id, day_of_week: t.day_of_week,
-    start_time: t.start_time.slice(0, 5), end_time: t.end_time.slice(0, 5),
+    start_time: hm(t.start_time), end_time: hm(t.end_time),
     location_id: t.location_id, role_id: t.role_id,
   });
   const onSaved = () => { setEditing(null); load(); };
@@ -164,17 +206,31 @@ export default function Admin({ me, notify, onLogout }) {
   };
 
   const dayHours = (rows) =>
-    Math.round(rows.reduce((a, t) => a + hoursBetween(t.start_time.slice(0, 5), t.end_time.slice(0, 5)), 0) * 10) / 10;
+    Math.round(rows.reduce((a, t) => a + hoursBetween(hm(t.start_time), hm(t.end_time)), 0) * 10) / 10;
 
   const weeklyHours = (staffId) =>
-    (template ?? [])
+    Math.round((template ?? [])
       .filter((t) => t.staff.id === staffId)
-      .reduce((acc, t) => acc + hoursBetween(t.start_time.slice(0, 5), t.end_time.slice(0, 5)), 0);
+      .reduce((acc, t) => acc + hoursBetween(hm(t.start_time), hm(t.end_time)), 0) * 10) / 10;
 
   const totalHours = (template ?? []).reduce(
-    (acc, t) => acc + hoursBetween(t.start_time.slice(0, 5), t.end_time.slice(0, 5)), 0,
+    (acc, t) => acc + hoursBetween(hm(t.start_time), hm(t.end_time)), 0,
   );
-  const activeStaff = meta?.staff.filter((s) => s.active).length ?? 0;
+  const activeStaff = meta?.staff.filter((s) => s.active) ?? [];
+
+  // per-person rostered vs contract, for the balance panel
+  const balance = activeStaff.map((s) => {
+    const rostered = weeklyHours(s.id);
+    const contract = Number(s.contract_hours) || 0;
+    const diff = Math.round((rostered - contract) * 10) / 10;
+    let status;
+    if (!contract) status = { label: `${rostered}h`, cls: "muted" };
+    else if (diff > 0.05) status = { label: `+${diff}h over`, cls: "over" };
+    else if (diff < -0.05) status = { label: `${Math.abs(diff)}h under`, cls: "under" };
+    else status = { label: "On target", cls: "on" };
+    const pct = contract ? Math.min(rostered / contract, 1) * 100 : 0;
+    return { s, rostered, contract, status, pct };
+  }).sort((a, b) => (b.rostered - b.contract) - (a.rostered - a.contract));
 
   return (
     <div className="plain-page">
@@ -193,17 +249,21 @@ export default function Admin({ me, notify, onLogout }) {
           <div className="l">Hours / wk</div>
         </div>
         <div className="stat">
-          <div className="v">{activeStaff || "–"}</div>
+          <div className="v">{activeStaff.length || "–"}</div>
           <div className="l">Active staff</div>
         </div>
       </div>
 
       <div className="roster-toolbar">
         <p className="section-title" style={{ margin: 0 }}>Weekly roster</p>
-        <button className="btn small" onClick={() => openNew(0)}>+ New shift</button>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn small secondary" onClick={() => window.print()}>Print</button>
+          <button className="btn small" onClick={() => openNew(0)}>+ New shift</button>
+        </div>
       </div>
-      <p className="hint" style={{ margin: "-6px 0 12px", fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>
-        Tap any shift to edit its person, time, location or role — or use a day's <strong>+ Add</strong> button.
+      <p className="hint">
+        Tap any shift to edit its person, time, location or role. The editor flags double-bookings and
+        availability clashes as you go.
       </p>
 
       {template === null && <p className="empty">Loading…</p>}
@@ -221,28 +281,55 @@ export default function Admin({ me, notify, onLogout }) {
                   </span>
                 </div>
                 {rows.length === 0 && <p className="day-empty">No shifts yet</p>}
-                {rows.map((t) => (
-                  <button className="shift-chip" key={t.id} onClick={() => openEdit(t)}>
-                    <Avatar name={t.staff.name} size="sm" />
-                    <div className="grow">
-                      <div>
-                        <strong>{t.staff.name}</strong>
-                        <span className="when">{fmtTime(t.start_time)} – {fmtTime(t.end_time)}</span>
+                {rows.map((t) => {
+                  const warn = shiftWarnings(
+                    { id: t.id, staff_id: t.staff_id, day_of_week: t.day_of_week, start_time: hm(t.start_time), end_time: hm(t.end_time) },
+                    template, availability,
+                  );
+                  return (
+                    <button className={`shift-chip${warn.length ? " has-warn" : ""}`} key={t.id} onClick={() => openEdit(t)}>
+                      <Avatar name={t.staff.name} size="sm" />
+                      <div className="grow">
+                        <div>
+                          <strong>{t.staff.name}</strong>
+                          <span className="when">{fmtTime(t.start_time)} – {fmtTime(t.end_time)}</span>
+                          {warn.length > 0 && <span className="warn-dot" title={warn.join(" ")}>⚠</span>}
+                        </div>
+                        <div className="sub">📍 {t.location.name} · {t.role.name}</div>
                       </div>
-                      <div className="sub">📍 {t.location.name} · {t.role.name}</div>
-                    </div>
-                    <svg className="edit-ic" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                    </svg>
-                  </button>
-                ))}
+                      <svg className="edit-ic" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                  );
+                })}
                 <button className="add-shift" onClick={() => openNew(dow)}>+ Add shift</button>
               </div>
             );
           })}
         </div>
       )}
+
+      <p className="section-title">Weekly hours balance</p>
+      <div className="card">
+        {balance.length === 0 && <p className="empty" style={{ padding: 8 }}>—</p>}
+        {balance.map(({ s, rostered, contract, status, pct }) => (
+          <div className="balance-row" key={s.id}>
+            <Avatar name={s.name} size="sm" />
+            <div className="grow">
+              <div className="balance-top">
+                <strong>{s.name}</strong>
+                <span className={`bal-chip ${status.cls}`}>{status.label}</span>
+              </div>
+              <div className="balance-bar">
+                <span className={`fill ${status.cls}`} style={{ width: `${pct}%` }} />
+              </div>
+              <div className="sub">{rostered}h rostered{contract ? ` · ${contract}h contract` : " · no contract set"}</div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="cards-grid">
         <div className="card">
@@ -301,9 +388,39 @@ export default function Admin({ me, notify, onLogout }) {
         </div>
       </div>
 
+      {/* Clean printable weekly roster (screen-hidden, shown by the Print button) */}
+      {template !== null && (
+        <div className="print-roster">
+          <h1>The Mood &amp; Mind Centre — Weekly Roster</h1>
+          {DAY_NAMES.map((day, dow) => {
+            const rows = template.filter((t) => t.day_of_week === dow);
+            if (rows.length === 0) return null;
+            return (
+              <div className="print-day" key={dow}>
+                <h2>{day} <span>· {dayHours(rows)}h</span></h2>
+                <table>
+                  <tbody>
+                    {rows.map((t) => (
+                      <tr key={t.id}>
+                        <td className="pr-who">{t.staff.name}</td>
+                        <td className="pr-time">{fmtTime(t.start_time)} – {fmtTime(t.end_time)}</td>
+                        <td className="pr-loc">{t.location.name}</td>
+                        <td className="pr-role">{t.role.name}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {editing && (
         <ShiftEditor
           meta={meta}
+          template={template}
+          availability={availability}
           initial={editing}
           notify={notify}
           onClose={() => setEditing(null)}

@@ -527,8 +527,69 @@ select:focus, input:focus { outline: none; border-color: var(--brand-light); bac
   background: var(--brand-soft); color: var(--brand-deep);
   font-weight: 800; font-size: 13px; padding: 6px 12px; border-radius: 999px;
 }
-.editor-actions { display: flex; align-items: center; gap: 9px; margin-top: 6px; }
+.editor-actions { display: flex; align-items: center; gap: 9px; margin-top: 6px; flex-wrap: wrap; }
 .editor-actions .grow { flex: 1; }
+
+.roster-toolbar .hint, p.hint {
+  font-size: 12.5px; color: var(--muted); font-weight: 600; margin: -6px 0 12px;
+}
+
+.editor-warn {
+  background: #fff7e6; border: 1.5px solid #f0d48a; border-radius: 13px;
+  padding: 11px 13px; margin: 4px 0 12px; color: #8a5a00; font-size: 13px; font-weight: 600;
+}
+.editor-warn strong { display: block; font-weight: 800; margin-bottom: 4px; }
+.editor-warn ul { margin: 0 0 4px; padding-left: 18px; }
+.editor-warn li { margin: 2px 0; }
+.editor-warn .tiny { font-size: 11.5px; color: #a9803a; font-weight: 600; }
+
+.shift-chip.has-warn { border-color: #f0d48a; background: #fffaf0; }
+.warn-dot { color: #d69a1e; font-size: 12px; margin-left: 6px; }
+
+/* ---- hours balance ---- */
+.balance-row {
+  display: flex; align-items: center; gap: 11px; padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.balance-row:last-child { border-bottom: none; }
+.balance-row .grow { flex: 1; min-width: 0; }
+.balance-top { display: flex; align-items: center; gap: 8px; }
+.balance-top strong { font-weight: 800; font-size: 14px; }
+.bal-chip {
+  margin-left: auto; font-size: 11.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px;
+  white-space: nowrap;
+}
+.bal-chip.on { background: var(--brand-soft); color: var(--brand-deep); }
+.bal-chip.over { background: #fde7e4; color: #c74034; }
+.bal-chip.under { background: #fff2d6; color: #a06a00; }
+.bal-chip.muted { background: #eef1f0; color: var(--muted); }
+.balance-bar {
+  height: 7px; border-radius: 999px; background: #eef1f0; overflow: hidden; margin: 6px 0 3px;
+}
+.balance-bar .fill { display: block; height: 100%; border-radius: 999px; background: var(--brand); transition: width 0.3s ease; }
+.balance-bar .fill.over { background: #e0574a; }
+.balance-bar .fill.under { background: #f0b429; }
+.balance-bar .fill.on { background: var(--brand); }
+.balance-bar .fill.muted { background: #c7cdcb; }
+
+/* ---- printable roster ---- */
+.print-roster { display: none; }
+@media print {
+  .sidenav, .tabbar, .toast, .modal-back, .footer-note { display: none !important; }
+  .main > .plain-page > *:not(.print-roster) { display: none !important; }
+  .app, .main, .plain-page { display: block !important; background: #fff !important; }
+  .print-roster { display: block !important; color: #111; padding: 4px 2px; }
+  .print-roster h1 { font-size: 20px; font-weight: 800; margin: 0 0 14px; }
+  .print-day { margin-bottom: 14px; break-inside: avoid; }
+  .print-day h2 { font-size: 15px; font-weight: 800; margin: 0 0 5px; border-bottom: 2px solid #111; padding-bottom: 3px; }
+  .print-day h2 span { font-weight: 600; color: #555; }
+  .print-roster table { width: 100%; border-collapse: collapse; }
+  .print-roster td { padding: 4px 8px 4px 0; font-size: 12.5px; vertical-align: top; border-bottom: 1px solid #ddd; }
+  .print-roster .pr-who { font-weight: 700; width: 26%; }
+  .print-roster .pr-time { width: 26%; white-space: nowrap; }
+  .print-roster .pr-loc { width: 26%; color: #333; }
+  .print-roster .pr-role { color: #333; }
+}
 
 .stat-strip {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;

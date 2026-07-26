@@ -248,6 +248,21 @@ await modal.getByRole("button", { name: "Save changes" }).click();
 await page.waitForTimeout(500);
 check("template shift edited (PUT)", state.template.find((t) => t.id === "t1").end_time === "15:30:00");
 
+// 9c. editor flags an availability clash (Cass available 08:00–19:00 Mon)
+await page.getByRole("button", { name: "+ New shift" }).click();
+await page.waitForTimeout(300);
+await modal.locator("select").nth(0).selectOption({ label: "Cass Reid" });
+await modal.locator("select").nth(1).selectOption({ label: "Monday" });
+await modal.locator('input[type="time"]').nth(0).fill("20:00");
+await modal.locator('input[type="time"]').nth(1).fill("21:00");
+await page.waitForTimeout(200);
+check("editor warns on availability clash", await modal.locator(".editor-warn").isVisible());
+await modal.getByRole("button", { name: "Cancel" }).click();
+await page.waitForTimeout(200);
+
+// 9d. hours-balance panel flags under-contract staff
+check("balance panel flags under-contract", await page.locator(".bal-chip.under").first().isVisible());
+
 // 10. change own PIN from footer
 await page.getByRole("button", { name: "Calendar" }).click();
 await page.waitForTimeout(400);
