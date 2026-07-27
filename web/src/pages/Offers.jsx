@@ -86,7 +86,7 @@ export default function Offers({ me, notify }) {
   const [note, setNote] = useState("");
 
   const load = () => {
-    api("/offers").then((d) => setOffers(d.offers)).catch((e) => notify(e.message));
+    api("/offers").then((d) => setOffers(d.offers)).catch((e) => notify(e.message, "error"));
   };
   useEffect(load, []); // eslint-disable-line
 
@@ -103,7 +103,7 @@ export default function Offers({ me, notify }) {
         );
         load();
       })
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   const openPicker = () => {
@@ -119,19 +119,19 @@ export default function Offers({ me, notify }) {
         setMyShifts(d.shifts.filter((s) => s.staff_id === me.id && !active.has(s.id)));
         setShowPick(true);
       })
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   const submit = () => {
     api("/offers", { method: "POST", body: { shiftInstanceId: pickedShift.id, note } })
       .then(() => {
-        notify("Shift offered for swap.");
+        notify("Shift offered for swap.", "success");
         setShowPick(false);
         setPickedShift(null);
         setNote("");
         load();
       })
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   const open = (offers ?? []).filter((o) => o.status === "open");

@@ -46,10 +46,10 @@ function ChangePinModal({ onClose, notify }) {
     setBusy(true);
     api("/change-pin", { method: "POST", body: { pin } })
       .then(() => {
-        notify("PIN updated. Use it next time you sign in.");
+        notify("PIN updated. Use it next time you sign in.", "success");
         onClose();
       })
-      .catch((e) => notify(e.message))
+      .catch((e) => notify(e.message, "error"))
       .finally(() => setBusy(false));
   };
 
@@ -92,11 +92,12 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
+    const t = setTimeout(() => setToast(null), toast.type === "error" ? 4200 : 3000);
     return () => clearTimeout(t);
   }, [toast]);
 
-  const notify = (msg) => setToast(msg);
+  // notify(msg) or notify(msg, "error" | "success" | "info")
+  const notify = (msg, type = "info") => setToast((prev) => ({ msg, type, id: (prev?.id ?? 0) + 1 }));
 
   if (!session) {
     return (
@@ -174,7 +175,14 @@ export default function App() {
         ))}
       </nav>
       {showPin && <ChangePinModal onClose={() => setShowPin(false)} notify={notify} />}
-      {toast && <div className="toast">{toast}</div>}
+      {toast && (
+        <div className={`toast ${toast.type}`} key={toast.id} role="status">
+          <span className="toast-ic" aria-hidden="true">
+            {toast.type === "error" ? "!" : toast.type === "success" ? "✓" : "i"}
+          </span>
+          <span className="toast-msg">{toast.msg}</span>
+        </div>
+      )}
     </div>
   );
 }

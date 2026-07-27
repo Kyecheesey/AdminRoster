@@ -32,7 +32,7 @@ export default function Availability({ me, notify }) {
       }
       setWeek(w);
       setDirty(false);
-    }).catch((e) => notify(e.message));
+    }).catch((e) => notify(e.message, "error"));
     api("/unavailability").then((d) => setTimeOff(d.unavailability)).catch(() => {});
   };
 
@@ -54,29 +54,29 @@ export default function Availability({ me, notify }) {
     }));
     api("/availability", { method: "POST", body: { days } })
       .then(() => {
-        notify("Availability saved.");
+        notify("Availability saved.", "success");
         setDirty(false);
       })
-      .catch((e) => notify(e.message))
+      .catch((e) => notify(e.message, "error"))
       .finally(() => setSaving(false));
   };
 
   const addTimeOff = () => {
-    if (!form.start_date || !form.end_date) return notify("Pick start and end dates.");
-    if (form.end_date < form.start_date) return notify("End date is before start date.");
+    if (!form.start_date || !form.end_date) return notify("Pick start and end dates.", "error");
+    if (form.end_date < form.start_date) return notify("End date is before start date.", "error");
     api("/unavailability", { method: "POST", body: form })
       .then(() => {
-        notify(me.isAdmin ? "Time off added." : "Time off requested — awaiting approval.");
+        notify(me.isAdmin ? "Time off added." : "Time off requested — awaiting approval.", "success");
         setForm({ start_date: "", end_date: "", note: "" });
         load();
       })
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   const removeTimeOff = (id) => {
     api(`/unavailability?id=${id}`, { method: "DELETE" })
       .then(load)
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   return (

@@ -42,8 +42,8 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
   const warnings = useMemo(() => shiftWarnings(f, template ?? [], availability), [f, template, availability]);
 
   const save = () => {
-    if (!f.staff_id || !f.location_id || !f.role_id) return notify("Pick staff, location and role.");
-    if (f.end_time <= f.start_time) return notify("End time must be after start time.");
+    if (!f.staff_id || !f.location_id || !f.role_id) return notify("Pick staff, location and role.", "error");
+    if (f.end_time <= f.start_time) return notify("End time must be after start time.", "error");
     setBusy(true);
     const payload = {
       staff_id: f.staff_id, day_of_week: Number(f.day_of_week),
@@ -54,8 +54,8 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
       ? api("/admin/template", { method: "PUT", body: { ...payload, id: f.id } })
       : api("/admin/template", { method: "POST", body: payload });
     req
-      .then(() => { notify(f.id ? "Shift updated." : "Shift added to the roster."); onSaved(); })
-      .catch((e) => notify(e.message))
+      .then(() => { notify(f.id ? "Shift updated." : "Shift added to the roster.", "success"); onSaved(); })
+      .catch((e) => notify(e.message, "error"))
       .finally(() => setBusy(false));
   };
 
@@ -63,8 +63,8 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
     if (!confirm("Remove this shift from the fixed weekly roster?")) return;
     setBusy(true);
     api(`/admin/template?id=${f.id}`, { method: "DELETE" })
-      .then(() => { notify("Shift removed."); onSaved(); })
-      .catch((e) => notify(e.message))
+      .then(() => { notify("Shift removed.", "success"); onSaved(); })
+      .catch((e) => notify(e.message, "error"))
       .finally(() => setBusy(false));
   };
 
@@ -166,15 +166,15 @@ export default function Admin({ me, notify, onLogout }) {
 
   const loadOrgs = () => {
     if (!me.isPlatformAdmin) return;
-    api("/platform/orgs").then((d) => setOrgs(d.organisations)).catch((e) => notify(e.message));
+    api("/platform/orgs").then((d) => setOrgs(d.organisations)).catch((e) => notify(e.message, "error"));
   };
 
   const loadTimeOff = () =>
-    api("/unavailability?all=1").then((d) => setTimeOff(d.unavailability ?? [])).catch((e) => notify(e.message));
+    api("/unavailability?all=1").then((d) => setTimeOff(d.unavailability ?? [])).catch((e) => notify(e.message, "error"));
 
   const load = () => {
-    api("/meta").then(setMeta).catch((e) => notify(e.message));
-    api("/admin/template").then((d) => setTemplate(d.template)).catch((e) => notify(e.message));
+    api("/meta").then(setMeta).catch((e) => notify(e.message, "error"));
+    api("/admin/template").then((d) => setTemplate(d.template)).catch((e) => notify(e.message, "error"));
     api("/availability?all=1").then((d) => setAvailability(d.availability ?? [])).catch(() => {});
     loadTimeOff();
     loadOrgs();
@@ -184,27 +184,27 @@ export default function Admin({ me, notify, onLogout }) {
   const reviewTimeOff = (u, action) => {
     api(`/unavailability/${u.id}/${action}`, { method: "POST", body: { note: reviewNote[u.id] || null } })
       .then(() => {
-        notify(`${u.staff.name}'s time off ${action === "approve" ? "approved" : "denied"}.`);
+        notify(`${u.staff.name}'s time off ${action === "approve" ? "approved" : "denied"}.`, "success");
         setReviewNote((m) => ({ ...m, [u.id]: "" }));
         loadTimeOff();
       })
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   const addOrg = () => {
-    if (!orgForm.name.trim() || !orgForm.adminName.trim()) return notify("Workplace name and first admin name are required.");
-    if (!/^\d{4}$/.test(orgForm.adminPin)) return notify("The admin PIN must be exactly 4 digits.");
+    if (!orgForm.name.trim() || !orgForm.adminName.trim()) return notify("Workplace name and first admin name are required.", "error");
+    if (!/^\d{4}$/.test(orgForm.adminPin)) return notify("The admin PIN must be exactly 4 digits.", "error");
     setBusy(true);
     api("/platform/orgs", { method: "POST", body: {
       name: orgForm.name.trim(), short_name: orgForm.short_name.trim() || null,
       domain: orgForm.domain.trim() || null, adminName: orgForm.adminName.trim(), adminPin: orgForm.adminPin,
     } })
       .then((d) => {
-        notify(`${d.org.name} created. Its admin can sign in now.`);
+        notify(`${d.org.name} created. Its admin can sign in now.`, "success");
         setOrgForm({ name: "", short_name: "", domain: "", adminName: "", adminPin: "" });
         loadOrgs();
       })
-      .catch((e) => notify(e.message))
+      .catch((e) => notify(e.message, "error"))
       .finally(() => setBusy(false));
   };
 
@@ -221,8 +221,8 @@ export default function Admin({ me, notify, onLogout }) {
     if (!confirm(`Build the roster for the 8 weeks from ${fmtDateLong(start)}? Unswapped shifts are rebuilt from the roster; approved swaps are kept.`)) return;
     setBusy(true);
     api("/admin/regenerate", { method: "POST", body: { start, end: addDays(start, 55) } })
-      .then(() => notify(`Roster built for the 8 weeks from ${fmtDate(start)}.`))
-      .catch((e) => notify(e.message))
+      .then(() => notify(`Roster built for the 8 weeks from ${fmtDate(start)}.`, "success"))
+      .catch((e) => notify(e.message, "error"))
       .finally(() => setBusy(false));
   };
 
@@ -230,8 +230,8 @@ export default function Admin({ me, notify, onLogout }) {
     if (!confirm("Start a fresh roster? This clears every shift in the weekly roster and removes upcoming auto-generated shifts so you can build a new one from scratch. Approved swaps are kept. This cannot be undone.")) return;
     setBusy(true);
     api("/admin/template/clear", { method: "POST" })
-      .then(() => { notify("Fresh roster started — the week is now empty."); load(); })
-      .catch((e) => notify(e.message))
+      .then(() => { notify("Fresh roster started — the week is now empty.", "success"); load(); })
+      .catch((e) => notify(e.message, "error"))
       .finally(() => setBusy(false));
   };
 
@@ -239,25 +239,25 @@ export default function Admin({ me, notify, onLogout }) {
     const pin = prompt(`New 4-digit PIN for ${s.name}:`);
     if (!pin) return;
     api("/admin/staff", { method: "POST", body: { id: s.id, pin } })
-      .then(() => notify(`PIN updated for ${s.name}.`))
-      .catch((e) => notify(e.message));
+      .then(() => notify(`PIN updated for ${s.name}.`, "success"))
+      .catch((e) => notify(e.message, "error"));
   };
 
   const toggleActive = (s) => {
     api("/admin/staff", { method: "POST", body: { id: s.id, active: !s.active } })
       .then(load)
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   const addStaff = () => {
-    if (!staffForm.name || !staffForm.pin) return notify("Name and PIN are required.");
+    if (!staffForm.name || !staffForm.pin) return notify("Name and PIN are required.", "error");
     api("/admin/staff", { method: "POST", body: { ...staffForm, contract_hours: Number(staffForm.contract_hours) } })
       .then(() => {
-        notify(`${staffForm.name} added.`);
+        notify(`${staffForm.name} added.`, "success");
         setStaffForm({ name: "", pin: "", contract_hours: 0 });
         load();
       })
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   const dayHours = (rows) =>

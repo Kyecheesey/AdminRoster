@@ -41,7 +41,7 @@ export default function Calendar({ me, notify }) {
     setLoading(true);
     api(`/calendar?start=${start}&end=${end}`)
       .then(setData)
-      .catch((e) => notify(e.message))
+      .catch((e) => notify(e.message, "error"))
       .finally(() => setLoading(false));
   }, [cells]); // eslint-disable-line
 
@@ -81,11 +81,11 @@ export default function Calendar({ me, notify }) {
   const submitOffer = () => {
     api("/offers", { method: "POST", body: { shiftInstanceId: offerShift.id, note: offerNote } })
       .then(() => {
-        notify("Shift offered for swap — it's now visible in Offers.");
+        notify("Shift offered for swap — it's now visible in Offers.", "success");
         setOfferShift(null);
         setOfferNote("");
       })
-      .catch((e) => notify(e.message));
+      .catch((e) => notify(e.message, "error"));
   };
 
   return (

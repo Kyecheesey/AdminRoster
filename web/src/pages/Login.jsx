@@ -3,6 +3,16 @@ import { api } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
 import { LogoMark } from "../components/Logo.jsx";
 
+function Banner({ error }) {
+  if (!error) return <div className="login-status" />;
+  return (
+    <div className="login-error" role="alert">
+      <span className="le-ic" aria-hidden="true">!</span>
+      <span>{error}</span>
+    </div>
+  );
+}
+
 export default function Login({ onLogin }) {
   const [org, setOrg] = useState(null);          // resolved workplace
   const [checking, setChecking] = useState(true); // trying to auto-resolve by domain
@@ -90,7 +100,7 @@ export default function Login({ onLogin }) {
           </button>
           <p className="entry-hint">Enter the web address your organisation uses, or its short code.</p>
         </div>
-        <p className="error">{error}</p>
+        <Banner error={error} />
       </div>
     );
   }
@@ -118,7 +128,7 @@ export default function Login({ onLogin }) {
             </button>
           ))}
         </div>
-        <p className="error">{error}</p>
+        <Banner error={error} />
       </div>
     );
   }
@@ -136,7 +146,7 @@ export default function Login({ onLogin }) {
           ))}
         </div>
       </div>
-      <p className="error">{busy ? "Checking…" : error}</p>
+      {busy ? <p className="login-status">Checking…</p> : <Banner error={error} />}
       <div className="keypad">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
           <button key={d} onClick={() => press(d)}>{d}</button>
