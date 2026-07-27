@@ -4,28 +4,24 @@ import Avatar from "../components/Avatar.jsx";
 import { LogoMark } from "../components/Logo.jsx";
 
 export default function Login({ onLogin }) {
-  const [orgs, setOrgs] = useState(null);   // list of workplaces, or null while loading
-  const [org, setOrg] = useState(null);      // chosen workplace
-  const [staff, setStaff] = useState(null);  // staff for the chosen workplace
+  const [org, setOrg] = useState(null);          // resolved workplace
+  const [checking, setChecking] = useState(true); // trying to auto-resolve by domain
+  const [entry, setEntry] = useState("");          // typed domain / code
+  const [staff, setStaff] = useState(null);        // staff for the workplace
   const [picked, setPicked] = useState(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // 1. load the workplace directory; auto-select by domain, or if there's only one
+  // 1. try to resolve the workplace from the current domain; otherwise ask for it
   useEffect(() => {
-    api("/orgs")
-      .then((d) => {
-        const list = d.organisations ?? [];
-        setOrgs(list);
-        const byDomain = list.find((o) => o.domain && o.domain === window.location.hostname);
-        if (byDomain) setOrg(byDomain);
-        else if (list.length === 1) setOrg(list[0]);
-      })
-      .catch(() => setError("Could not load workplaces. Check your connection."));
+    api(`/resolve-org?q=${encodeURIComponent(window.location.hostname)}`)
+      .then((d) => setOrg(d.org))
+      .catch(() => {})
+      .finally(() => setChecking(false));
   }, []);
 
-  // 2. once a workplace is chosen, load its staff
+  // 2. once a workplace is known, load its staff
   useEffect(() => {
     if (!org) return;
     setStaff(null);
@@ -47,6 +43,17 @@ export default function Login({ onLogin }) {
       .finally(() => setBusy(false));
   }, [pin, picked, busy, onLogin, org]);
 
+  const resolveEntry = () => {
+    const q = entry.trim();
+    if (!q) return setError("Enter your workplace domain or code.");
+    setBusy(true);
+    setError("");
+    api(`/resolve-org?q=${encodeURIComponent(q)}`)
+      .then((d) => setOrg(d.org))
+      .catch((e) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+
   const press = (d) => {
     setError("");
     if (pin.length < 4) setPin(pin + d);
@@ -59,21 +66,29 @@ export default function Login({ onLogin }) {
     </>
   );
 
-  // --- step A: choose a workplace ---
+  // --- step A: enter the workplace domain / code ---
   if (!org) {
     return (
       <div className="login">
         <Wordmark />
-        <p className="subtitle">Choose your workplace</p>
-        <div className="org-grid">
-          {orgs === null && <p className="load-note">Loading…</p>}
-          {orgs?.length === 0 && <p className="load-note">No workplaces set up yet.</p>}
-          {orgs?.map((o) => (
-            <button key={o.id} className="org-card" onClick={() => { setOrg(o); setError(""); }}>
-              <span className="org-badge">{(o.short_name || o.name).slice(0, 3)}</span>
-              <span className="org-name">{o.name}</span>
-            </button>
-          ))}
+        <p className="subtitle">Sign in to your workplace</p>
+        <div className="org-entry">
+          <label className="entry-label">Workplace domain or code</label>
+          <input
+            className="entry-input"
+            type="text"
+            inputMode="url"
+            autoFocus
+            placeholder="e.g. yourclinic.rosterme.app"
+            value={entry}
+            disabled={checking}
+            onChange={(e) => setEntry(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") resolveEntry(); }}
+          />
+          <button className="entry-go" onClick={resolveEntry} disabled={busy || checking}>
+            {checking ? "Checking…" : busy ? "Finding…" : "Continue"}
+          </button>
+          <p className="entry-hint">Enter the web address your organisation uses, or its short code.</p>
         </div>
         <p className="error">{error}</p>
       </div>
@@ -88,15 +103,14 @@ export default function Login({ onLogin }) {
         <p className="org-context">
           <span className="org-badge sm">{(org.short_name || org.name).slice(0, 3)}</span>
           {org.name}
-          {orgs && orgs.length > 1 && (
-            <button className="switch-org" onClick={() => { setOrg(null); setStaff(null); setError(""); }}>
-              Change
-            </button>
-          )}
+          <button className="switch-org" onClick={() => { setOrg(null); setStaff(null); setEntry(""); setError(""); }}>
+            Change
+          </button>
         </p>
         <p className="subtitle">Who's signing in?</p>
         <div className="name-grid">
           {staff === null && <p className="load-note">Loading…</p>}
+          {staff?.length === 0 && <p className="load-note">No staff set up for this workplace yet.</p>}
           {staff?.map((s) => (
             <button key={s.id} className="name-card" onClick={() => { setPicked(s); setError(""); }}>
               <Avatar name={s.name} />

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { DAY_NAMES, fmtTime, todayIso, addDays, hoursBetween } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
@@ -74,7 +75,7 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
 
   const active = (meta?.staff ?? []).filter((s) => s.active);
 
-  return (
+  return createPortal(
     <div className="modal-back" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="grab" />
@@ -144,7 +145,8 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
           <button className="btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

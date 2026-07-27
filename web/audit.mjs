@@ -61,7 +61,11 @@ async function handle(route) {
   const reply = (b, status = 200) => route.fulfill({ status, json: b, headers: { "Access-Control-Allow-Origin": "*" } });
   state.posts.push(`${method} ${p}`);
 
-  if (p === "/orgs") return reply({ organisations: [org] });
+  if (p === "/resolve-org") {
+    const q = (url.searchParams.get("q") || "").toLowerCase();
+    if (q === "mm" || q === org.slug || q === org.domain) return reply({ org });
+    return reply({ error: "No workplace found for that address" }, 404);
+  }
   if (p === "/bootstrap") return reply({ org, staff: staff.map(({ id, name }) => ({ id, name })) });
   if (p === "/login") {
     if (body.pin !== "1234") return reply({ error: "Wrong PIN" }, 401);
@@ -159,13 +163,18 @@ const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 page.on("console", (m) => {
-  // ignore network noise and the deliberate wrong-PIN 401 from step 1
-  if (m.type() === "error" && !m.text().includes("net::") && !m.text().includes("401")) errors.push(m.text());
+  // ignore network noise, the deliberate wrong-PIN 401, and the expected 404
+  // when the hostname doesn't map to a workplace (login falls back to entry)
+  if (m.type() === "error" && !m.text().includes("net::") && !m.text().includes("401") && !m.text().includes("404")) errors.push(m.text());
 });
 await page.route("**/functions/v1/api/**", handle);
 
-// 1. login: wrong PIN then right PIN
+// 1. login: enter workplace code, wrong PIN then right PIN
 await page.goto("http://localhost:5199/");
+await page.getByPlaceholder(/rosterme\.app/).fill("mm");
+await page.getByRole("button", { name: "Continue" }).click();
+await page.waitForTimeout(400);
+check("workplace resolves by code", await page.getByRole("button", { name: /Cass/ }).isVisible());
 await page.getByRole("button", { name: /Cass/ }).click();
 for (const d of "9999") await page.getByRole("button", { name: d, exact: true }).click();
 await page.waitForTimeout(500);
@@ -307,7 +316,7 @@ check("away shift flagged as needing cover", await page.getByText("Away — need
 // 12. sign out returns to login
 await page.getByRole("button", { name: "Sign out" }).click();
 await page.waitForTimeout(400);
-check("sign out returns to name picker", await page.getByText("Who's signing in?").isVisible());
+check("sign out returns to workplace entry", await page.getByText("Sign in to your workplace").isVisible());
 
 check("no console/page errors", errors.length === 0);
 console.log(results.join("\n"));

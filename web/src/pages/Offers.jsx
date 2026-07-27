@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { fmtTime, fmtDate, todayIso, addDays } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
@@ -179,7 +180,7 @@ export default function Offers({ me, notify }) {
 
       <button className="fab" onClick={openPicker} aria-label="Offer a shift">+</button>
 
-      {showPick && (
+      {showPick && createPortal(
         <div className="modal-back" onClick={() => setShowPick(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="grab" />
@@ -216,7 +217,8 @@ export default function Offers({ me, notify }) {
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { iso, todayIso, parseIso, fmtDateLong, DAY_SHORT, dowOf, addDays, hoursBetween } from "../util.js";
 import ShiftCard from "../components/ShiftCard.jsx";
@@ -199,7 +200,7 @@ export default function Calendar({ me, notify }) {
         })}
       </div>
 
-      {offerShift && (
+      {offerShift && createPortal(
         <div className="modal-back" onClick={() => setOfferShift(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="grab" />
@@ -219,7 +220,8 @@ export default function Calendar({ me, notify }) {
               <button className="btn secondary" onClick={() => setOfferShift(null)}>Cancel</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

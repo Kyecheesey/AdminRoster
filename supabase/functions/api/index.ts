@@ -170,12 +170,25 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ---------- public ----------
-    // list organisations (workplaces) so the login screen can offer a chooser
-    if (path === "/orgs" && req.method === "GET") {
-      const { data, error } = await supabase.from("organisations")
-        .select("id, slug, name, short_name, domain").eq("active", true).order("name");
-      if (error) throw error;
-      return json({ organisations: data });
+    // Resolve a single workplace by its custom domain or its code (slug).
+    // There is deliberately no public directory: you reach a workplace only by
+    // knowing its domain/code, so organisations stay private from each other.
+    if (path === "/resolve-org" && req.method === "GET") {
+      const raw = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const q = raw.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      if (!q || !/^[a-z0-9][a-z0-9.\-]{0,80}$/.test(q)) {
+        return json({ error: "Enter your workplace domain or code" }, 400);
+      }
+      const cols = "id, slug, name, short_name, domain";
+      let { data } = await supabase.from("organisations").select(cols)
+        .eq("active", true).eq("domain", q).maybeSingle();
+      if (!data) {
+        const r = await supabase.from("organisations").select(cols)
+          .eq("active", true).eq("slug", q).maybeSingle();
+        data = r.data;
+      }
+      if (!data) return json({ error: "No workplace found for that address" }, 404);
+      return json({ org: data });
     }
 
     if (path === "/bootstrap" && req.method === "GET") {

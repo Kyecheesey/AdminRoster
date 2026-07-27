@@ -239,6 +239,30 @@ button { font-family: inherit; }
 }
 .org-badge.sm { width: 30px; height: 30px; border-radius: 9px; font-size: 11px; }
 
+/* workplace domain entry */
+.org-entry {
+  width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 10px;
+  animation: fade-up 0.4s 0.15s ease both;
+}
+.org-entry .entry-label {
+  font-size: 12px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
+  color: #a7d8ca; margin-bottom: -2px;
+}
+.org-entry .entry-input {
+  width: 100%; padding: 15px 16px; border-radius: 15px; font-size: 16px; font-weight: 600;
+  background: rgba(255,255,255,0.95); border: 1px solid rgba(255,255,255,0.3); color: #0d2a23;
+}
+.org-entry .entry-input:focus { outline: none; border-color: #ffd66b; background: #fff; }
+.org-entry .entry-go {
+  width: 100%; padding: 14px; border-radius: 15px; border: none; cursor: pointer;
+  background: #ffd66b; color: #29200a; font-weight: 800; font-size: 15px; font-family: inherit;
+  transition: transform 0.12s, filter 0.15s;
+}
+.org-entry .entry-go:hover { filter: brightness(1.05); }
+.org-entry .entry-go:active { transform: scale(0.98); }
+.org-entry .entry-go:disabled { opacity: 0.6; cursor: default; }
+.org-entry .entry-hint { font-size: 12.5px; color: #9fccbe; font-weight: 600; margin-top: -2px; }
+
 .org-context {
   display: flex; align-items: center; gap: 9px; color: #eafaf3; font-weight: 700; font-size: 14px;
   animation: fade-up 0.4s 0.1s ease both; margin-top: -6px;
