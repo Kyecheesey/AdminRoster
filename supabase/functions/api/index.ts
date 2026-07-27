@@ -270,6 +270,7 @@ Deno.serve(async (req: Request) => {
           .neq("status", "cancelled")
           .order("shift_date").order("start_time"),
         supabase.from("unavailability").select("*, staff:staff(id, name)").eq("org_id", me.oid)
+          .eq("status", "approved")
           .lte("start_date", end).gte("end_date", start),
       ]);
       if (shifts.error || unavail.error) throw shifts.error ?? unavail.error;
@@ -315,8 +316,27 @@ Deno.serve(async (req: Request) => {
     if (path === "/unavailability" && req.method === "POST") {
       const target = me.adm && body.staffId ? body.staffId : me.sid;
       const { start_date, end_date, note } = body;
-      const { error } = await supabase
-        .from("unavailability").insert({ staff_id: target, org_id: me.oid, start_date, end_date, note });
+      // admins entering time off approve it outright; staff requests await review
+      const row = me.adm
+        ? { staff_id: target, org_id: me.oid, start_date, end_date, note, status: "approved", reviewed_by: me.sid, reviewed_at: new Date().toISOString() }
+        : { staff_id: target, org_id: me.oid, start_date, end_date, note, status: "pending" };
+      const { error } = await supabase.from("unavailability").insert(row);
+      if (error) throw error;
+      return json({ ok: true });
+    }
+
+    const uaReview = path.match(/^\/unavailability\/([0-9a-f-]+)\/(approve|deny)$/);
+    if (uaReview && req.method === "POST") {
+      if (!me.adm) return json({ error: "Admin only" }, 403);
+      const [, id, action] = uaReview;
+      const { error } = await supabase.from("unavailability")
+        .update({
+          status: action === "approve" ? "approved" : "denied",
+          admin_note: body.note ?? null,
+          reviewed_by: me.sid,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", id).eq("org_id", me.oid);
       if (error) throw error;
       return json({ ok: true });
     }

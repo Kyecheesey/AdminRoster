@@ -66,7 +66,7 @@ export default function Availability({ me, notify }) {
     if (form.end_date < form.start_date) return notify("End date is before start date.");
     api("/unavailability", { method: "POST", body: form })
       .then(() => {
-        notify("Time off added — the roster will show you as away.");
+        notify(me.isAdmin ? "Time off added." : "Time off requested — awaiting approval.");
         setForm({ start_date: "", end_date: "", note: "" });
         load();
       })
@@ -145,7 +145,11 @@ export default function Availability({ me, notify }) {
             <span className="chip away">✈️</span>
             <div className="grow">
               <strong>{fmtDate(u.start_date)}{u.end_date !== u.start_date ? ` – ${fmtDate(u.end_date)}` : ""}</strong>
+              <span className={`ua-badge ${u.status || "approved"}`}>
+                {u.status === "pending" ? "Pending" : u.status === "denied" ? "Denied" : "Approved"}
+              </span>
               {u.note && <div className="sub">{u.note}</div>}
+              {u.admin_note && <div className="sub manager-note">Manager: {u.admin_note}</div>}
             </div>
             <button className="btn small secondary" onClick={() => removeTimeOff(u.id)}>Remove</button>
           </div>

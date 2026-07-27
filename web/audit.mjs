@@ -35,7 +35,9 @@ const state = {
     { id: "o1", shift_instance_id: "sh2", offered_by: "s4", accepted_by: null, status: "open", offer_note: "Appointment", admin_note: null, created_at: "2026-07-20T00:00:00Z", updated_at: "2026-07-20T00:00:00Z" },
   ],
   availability: [0, 1, 2, 3, 4].map((d) => ({ id: `a${d}`, staff_id: "s3", day_of_week: d, is_available: true, available_from: "08:00:00", available_to: "19:00:00", note: null })),
-  unavailability: [],
+  unavailability: [
+    { id: "uo1", staff_id: "s4", start_date: tmrIso, end_date: tmrIso, note: "Family holiday", status: "pending", admin_note: null },
+  ],
   template: [
     { id: "t1", day_of_week: 0, start_time: "08:00:00", end_time: "13:00:00", staff_id: "s3", location_id: "l1", role_id: "r1", staff: { id: "s3", name: "Cass Reid" }, location: { name: "Hope Island" }, role: { name: "Centre Admin" } },
   ],
@@ -81,7 +83,7 @@ async function handle(route) {
   if (p === "/calendar") {
     return reply({
       shifts: state.shifts.filter((s) => s.status !== "cancelled").map((s) => ({ ...s, staff: byId[s.staff_id] })),
-      unavailability: state.unavailability.map((u) => ({ ...u, staff: byId[u.staff_id] })),
+      unavailability: state.unavailability.filter((u) => (u.status || "approved") === "approved").map((u) => ({ ...u, staff: byId[u.staff_id] })),
     });
   }
   if (p === "/offers" && method === "GET") return reply({ offers: state.offers.map(offerView) });
@@ -112,9 +114,19 @@ async function handle(route) {
     }
     return reply({ ok: true });
   }
-  if (p === "/unavailability" && method === "GET") return reply({ unavailability: state.unavailability.map((u) => ({ ...u, staff: byId[u.staff_id] })) });
+  if (p === "/unavailability" && method === "GET") {
+    const all = url.searchParams.get("all") === "1";
+    const rows = all ? state.unavailability : state.unavailability.filter((u) => u.staff_id === "s3");
+    return reply({ unavailability: rows.map((u) => ({ ...u, staff: byId[u.staff_id] })) });
+  }
   if (p === "/unavailability" && method === "POST") {
-    state.unavailability.push({ id: `u${state.unavailability.length + 1}`, staff_id: "s3", ...body });
+    state.unavailability.push({ id: `u${state.unavailability.length + 1}`, staff_id: "s3", status: "pending", admin_note: null, ...body });
+    return reply({ ok: true });
+  }
+  const uar = p.match(/^\/unavailability\/([\w-]+)\/(approve|deny)$/);
+  if (uar && method === "POST") {
+    const u = state.unavailability.find((x) => x.id === uar[1]);
+    if (u) { u.status = uar[2] === "approve" ? "approved" : "denied"; u.admin_note = body.note || null; }
     return reply({ ok: true });
   }
   if (p === "/unavailability" && method === "DELETE") {
@@ -237,10 +249,10 @@ await page.locator('input[type="date"]').nth(1).fill(tmrIso);
 await page.getByPlaceholder("Reason (optional)").fill("dentist");
 await page.getByRole("button", { name: "Add", exact: true }).click();
 await page.waitForTimeout(500);
-check("time off added", state.unavailability.length === 1);
+check("time off added", state.unavailability.filter((u) => u.staff_id === "s3").length === 1);
 await page.getByRole("button", { name: "Remove" }).first().click();
 await page.waitForTimeout(400);
-check("time off removed", state.unavailability.length === 0);
+check("time off removed", state.unavailability.filter((u) => u.staff_id === "s3").length === 0);
 
 // 9. admin: add a shift via the editor modal
 await page.getByRole("button", { name: "Admin" }).click();
@@ -294,6 +306,14 @@ await page.waitForTimeout(500);
 check("new organisation created", state.orgs.length === 2 && state.orgs[1].name === "Sunshine Clinic");
 check("new organisation shown in list", await page.getByText("Sunshine Clinic").first().isVisible());
 
+// 9f. holiday approvals: approve a pending request with a comment
+check("pending holiday shown to admin", await page.getByText("Family holiday").first().isVisible());
+await page.locator(".timeoff-row.pending input").first().fill("Enjoy!");
+await page.locator(".timeoff-row.pending").first().getByRole("button", { name: "Approve" }).click();
+await page.waitForTimeout(400);
+const uo1 = state.unavailability.find((u) => u.id === "uo1");
+check("holiday approved with comment", uo1.status === "approved" && uo1.admin_note === "Enjoy!");
+
 // 10. change own PIN from footer
 await page.getByRole("button", { name: "Calendar" }).click();
 await page.waitForTimeout(400);
@@ -306,7 +326,7 @@ await page.waitForTimeout(400);
 check("change PIN round-trips", state.changedPin === "5678");
 
 // 11. away chip: Debbie has time off today; her shift should be flagged
-state.unavailability.push({ id: "u9", staff_id: "s4", start_date: todayIso, end_date: todayIso, note: "sick" });
+state.unavailability.push({ id: "u9", staff_id: "s4", start_date: todayIso, end_date: todayIso, note: "sick", status: "approved" });
 state.shifts.find((s) => s.id === "sh2").staff_id = "s4"; // restore Debbie on today's shift
 await page.getByRole("button", { name: "Today" }).click();
 await page.getByRole("button", { name: "Everyone" }).click();

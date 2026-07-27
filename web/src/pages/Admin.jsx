@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api.js";
-import { DAY_NAMES, fmtTime, todayIso, addDays, hoursBetween } from "../util.js";
+import { DAY_NAMES, fmtTime, fmtDate, todayIso, addDays, hoursBetween } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
 
 const blankShift = { id: null, staff_id: "", day_of_week: 0, start_time: "08:00", end_time: "13:00", location_id: "", role_id: "" };
@@ -159,19 +159,35 @@ export default function Admin({ me, notify, onLogout }) {
   const [busy, setBusy] = useState(false);
   const [orgs, setOrgs] = useState(null); // platform-admin org directory
   const [orgForm, setOrgForm] = useState({ name: "", short_name: "", domain: "", adminName: "", adminPin: "" });
+  const [timeOff, setTimeOff] = useState(null); // all staff holiday requests
+  const [reviewNote, setReviewNote] = useState({}); // per-request comment draft
 
   const loadOrgs = () => {
     if (!me.isPlatformAdmin) return;
     api("/platform/orgs").then((d) => setOrgs(d.organisations)).catch((e) => notify(e.message));
   };
 
+  const loadTimeOff = () =>
+    api("/unavailability?all=1").then((d) => setTimeOff(d.unavailability ?? [])).catch((e) => notify(e.message));
+
   const load = () => {
     api("/meta").then(setMeta).catch((e) => notify(e.message));
     api("/admin/template").then((d) => setTemplate(d.template)).catch((e) => notify(e.message));
     api("/availability?all=1").then((d) => setAvailability(d.availability ?? [])).catch(() => {});
+    loadTimeOff();
     loadOrgs();
   };
   useEffect(load, []); // eslint-disable-line
+
+  const reviewTimeOff = (u, action) => {
+    api(`/unavailability/${u.id}/${action}`, { method: "POST", body: { note: reviewNote[u.id] || null } })
+      .then(() => {
+        notify(`${u.staff.name}'s time off ${action === "approve" ? "approved" : "denied"}.`);
+        setReviewNote((m) => ({ ...m, [u.id]: "" }));
+        loadTimeOff();
+      })
+      .catch((e) => notify(e.message));
+  };
 
   const addOrg = () => {
     if (!orgForm.name.trim() || !orgForm.adminName.trim()) return notify("Workplace name and first admin name are required.");
@@ -357,6 +373,67 @@ export default function Admin({ me, notify, onLogout }) {
           </div>
         ))}
       </div>
+
+      {(() => {
+        const list = timeOff ?? [];
+        const pending = list.filter((u) => u.status === "pending");
+        const decided = list.filter((u) => u.status !== "pending");
+        return (
+          <>
+            <p className="section-title">
+              Time off &amp; holidays
+              {pending.length > 0 && <span className="pending-count">{pending.length} to review</span>}
+            </p>
+            <div className="card">
+              {timeOff === null && <p className="empty" style={{ padding: 8 }}>Loading…</p>}
+              {timeOff !== null && list.length === 0 && (
+                <p className="empty" style={{ padding: 12 }}><span className="big">🏖️</span>No time off requested.</p>
+              )}
+              {pending.map((u) => (
+                <div className="timeoff-row pending" key={u.id}>
+                  <div className="timeoff-head">
+                    <Avatar name={u.staff.name} size="sm" />
+                    <div className="grow">
+                      <strong>{u.staff.name}</strong>
+                      <span className="ua-badge pending">Pending</span>
+                      <div className="sub">
+                        {fmtDate(u.start_date)}{u.end_date !== u.start_date ? ` – ${fmtDate(u.end_date)}` : ""}
+                        {u.note ? ` · ${u.note}` : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="timeoff-actions">
+                    <input
+                      type="text" placeholder="Add a comment (optional)"
+                      value={reviewNote[u.id] || ""}
+                      onChange={(e) => setReviewNote((m) => ({ ...m, [u.id]: e.target.value }))}
+                    />
+                    <button className="btn small green" onClick={() => reviewTimeOff(u, "approve")}>Approve</button>
+                    <button className="btn small red" onClick={() => reviewTimeOff(u, "deny")}>Deny</button>
+                  </div>
+                </div>
+              ))}
+              {decided.map((u) => (
+                <div className="list-row" key={u.id}>
+                  <Avatar name={u.staff.name} size="sm" />
+                  <div className="grow">
+                    <strong>{u.staff.name}</strong>
+                    <span className={`ua-badge ${u.status}`}>{u.status === "approved" ? "Approved" : "Denied"}</span>
+                    <div className="sub">
+                      {fmtDate(u.start_date)}{u.end_date !== u.start_date ? ` – ${fmtDate(u.end_date)}` : ""}
+                      {u.note ? ` · ${u.note}` : ""}
+                    </div>
+                    {u.admin_note && <div className="sub manager-note">Your note: {u.admin_note}</div>}
+                  </div>
+                  {u.status === "denied" && (
+                    <button className="btn small secondary" onClick={() => reviewTimeOff(u, "approve")}>Approve</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       <div className="cards-grid">
         <div className="card">
