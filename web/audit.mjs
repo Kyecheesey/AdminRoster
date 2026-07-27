@@ -18,6 +18,7 @@ const staff = [
 const byId = Object.fromEntries(staff.map((s) => [s.id, s]));
 const locName = { l1: "Hope Island", l2: "Upper Coomera" };
 const roleName = { r1: "Centre Admin", r2: "Mood Admin" };
+const org = { id: "o-mm", slug: "mm", name: "The Mood & Mind Centre", short_name: "M&M" };
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const today = new Date();
 const todayIso = iso(today);
@@ -39,6 +40,7 @@ const state = {
     { id: "t1", day_of_week: 0, start_time: "08:00:00", end_time: "13:00:00", staff_id: "s3", location_id: "l1", role_id: "r1", staff: { id: "s3", name: "Cass Reid" }, location: { name: "Hope Island" }, role: { name: "Centre Admin" } },
   ],
   posts: [],
+  orgs: [{ id: "o-mm", slug: "mm", name: "The Mood & Mind Centre", short_name: "M&M", domain: null, staff_count: 8 }],
 };
 
 function offerView(o) {
@@ -59,10 +61,18 @@ async function handle(route) {
   const reply = (b, status = 200) => route.fulfill({ status, json: b, headers: { "Access-Control-Allow-Origin": "*" } });
   state.posts.push(`${method} ${p}`);
 
-  if (p === "/bootstrap") return reply({ staff: staff.map(({ id, name }) => ({ id, name })) });
+  if (p === "/orgs") return reply({ organisations: [org] });
+  if (p === "/bootstrap") return reply({ org, staff: staff.map(({ id, name }) => ({ id, name })) });
   if (p === "/login") {
     if (body.pin !== "1234") return reply({ error: "Wrong PIN" }, 401);
-    return reply({ token: "t.t", staff: { id: "s3", name: "Cass Reid", isAdmin: true } });
+    return reply({ token: "t.t", staff: { id: "s3", name: "Cass Reid", isAdmin: true, isPlatformAdmin: true }, org });
+  }
+  if (p === "/platform/orgs" && method === "GET")
+    return reply({ organisations: state.orgs });
+  if (p === "/platform/orgs" && method === "POST") {
+    const o = { id: `o${state.orgs.length + 1}`, slug: (body.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: body.name, short_name: body.short_name, domain: body.domain, staff_count: 1 };
+    state.orgs.push(o);
+    return reply({ ok: true, org: o });
   }
   if (p === "/calendar") {
     return reply({
@@ -262,6 +272,18 @@ await page.waitForTimeout(200);
 
 // 9d. hours-balance panel flags under-contract staff
 check("balance panel flags under-contract", await page.locator(".bal-chip.under").first().isVisible());
+
+// 9e. platform admin: organisations panel + create a new workplace
+check("organisations panel visible to platform admin", await page.getByText("Add a workplace").isVisible());
+check("existing org listed in platform panel", await page.locator(".org-add").first().isVisible() && (await page.locator(".list-row strong", { hasText: "The Mood & Mind Centre" }).count()) > 0);
+await page.getByPlaceholder("Workplace name").fill("Sunshine Clinic");
+await page.getByPlaceholder("Badge (e.g. M&M)").fill("SUN");
+await page.getByPlaceholder("First admin name").fill("Pat Lee");
+await page.getByPlaceholder("Admin PIN").fill("2468");
+await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForTimeout(500);
+check("new organisation created", state.orgs.length === 2 && state.orgs[1].name === "Sunshine Clinic");
+check("new organisation shown in list", await page.getByText("Sunshine Clinic").first().isVisible());
 
 // 10. change own PIN from footer
 await page.getByRole("button", { name: "Calendar" }).click();

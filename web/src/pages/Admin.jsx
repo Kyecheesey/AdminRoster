@@ -155,13 +155,38 @@ export default function Admin({ me, notify, onLogout }) {
   const [editing, setEditing] = useState(null); // shift editor payload, or null
   const [staffForm, setStaffForm] = useState({ name: "", pin: "", contract_hours: 0 });
   const [busy, setBusy] = useState(false);
+  const [orgs, setOrgs] = useState(null); // platform-admin org directory
+  const [orgForm, setOrgForm] = useState({ name: "", short_name: "", domain: "", adminName: "", adminPin: "" });
+
+  const loadOrgs = () => {
+    if (!me.isPlatformAdmin) return;
+    api("/platform/orgs").then((d) => setOrgs(d.organisations)).catch((e) => notify(e.message));
+  };
 
   const load = () => {
     api("/meta").then(setMeta).catch((e) => notify(e.message));
     api("/admin/template").then((d) => setTemplate(d.template)).catch((e) => notify(e.message));
     api("/availability?all=1").then((d) => setAvailability(d.availability ?? [])).catch(() => {});
+    loadOrgs();
   };
   useEffect(load, []); // eslint-disable-line
+
+  const addOrg = () => {
+    if (!orgForm.name.trim() || !orgForm.adminName.trim()) return notify("Workplace name and first admin name are required.");
+    if (!/^\d{4}$/.test(orgForm.adminPin)) return notify("The admin PIN must be exactly 4 digits.");
+    setBusy(true);
+    api("/platform/orgs", { method: "POST", body: {
+      name: orgForm.name.trim(), short_name: orgForm.short_name.trim() || null,
+      domain: orgForm.domain.trim() || null, adminName: orgForm.adminName.trim(), adminPin: orgForm.adminPin,
+    } })
+      .then((d) => {
+        notify(`${d.org.name} created. Its admin can sign in now.`);
+        setOrgForm({ name: "", short_name: "", domain: "", adminName: "", adminPin: "" });
+        loadOrgs();
+      })
+      .catch((e) => notify(e.message))
+      .finally(() => setBusy(false));
+  };
 
   const openNew = (dow = 0) => setEditing({ ...blankShift, day_of_week: dow });
   const openEdit = (t) => setEditing({
@@ -387,6 +412,50 @@ export default function Admin({ me, notify, onLogout }) {
           <button className="btn" onClick={addStaff}>Add</button>
         </div>
       </div>
+
+      {me.isPlatformAdmin && (
+        <>
+          <p className="section-title">Organisations <span className="plat-tag">RosterME platform</span></p>
+          <div className="card">
+            {orgs === null && <p className="empty" style={{ padding: 8 }}>Loading…</p>}
+            {orgs?.map((o) => (
+              <div className="list-row" key={o.id}>
+                <span className="org-badge sm">{(o.short_name || o.name).slice(0, 3)}</span>
+                <div className="grow">
+                  <strong>{o.name}</strong>
+                  <div className="sub">
+                    {o.staff_count} staff · code <code>{o.slug}</code>
+                    {o.domain ? ` · ${o.domain}` : " · no custom domain"}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="org-add">
+              <p className="mini-label">Add a workplace</p>
+              <div className="row">
+                <input type="text" placeholder="Workplace name" value={orgForm.name}
+                  onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} style={{ flex: 2, minWidth: 160 }} />
+                <input type="text" placeholder="Badge (e.g. M&M)" value={orgForm.short_name}
+                  onChange={(e) => setOrgForm({ ...orgForm, short_name: e.target.value })} style={{ flex: 1, minWidth: 110 }} />
+              </div>
+              <div className="row" style={{ marginTop: 8 }}>
+                <input type="text" placeholder="Custom domain (optional)" value={orgForm.domain}
+                  onChange={(e) => setOrgForm({ ...orgForm, domain: e.target.value })} style={{ flex: 1, minWidth: 200 }} />
+              </div>
+              <div className="row" style={{ marginTop: 8 }}>
+                <input type="text" placeholder="First admin name" value={orgForm.adminName}
+                  onChange={(e) => setOrgForm({ ...orgForm, adminName: e.target.value })} style={{ flex: 2, minWidth: 150 }} />
+                <input type="text" inputMode="numeric" maxLength={4} placeholder="Admin PIN" value={orgForm.adminPin}
+                  onChange={(e) => setOrgForm({ ...orgForm, adminPin: e.target.value.replace(/\D/g, "") })} style={{ width: 96 }} />
+                <button className="btn" onClick={addOrg} disabled={busy}>Create</button>
+              </div>
+              <p className="hint" style={{ margin: "8px 0 0" }}>
+                New workplaces start with one location and role and their own admin — everything is kept separate from other organisations.
+              </p>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Clean printable weekly roster (screen-hidden, shown by the Print button) */}
       {template !== null && (

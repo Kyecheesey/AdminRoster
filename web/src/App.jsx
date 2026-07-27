@@ -79,7 +79,12 @@ function ChangePinModal({ onClose, notify }) {
 }
 
 export default function App() {
-  const [session, setSess] = useState(getSession());
+  const [session, setSess] = useState(() => {
+    // sessions issued before multi-org lack org context; force a clean re-login
+    const s = getSession();
+    if (s && !s.org) { setSession(null); return null; }
+    return s;
+  });
   const [tab, setTab] = useState("calendar");
   const [toast, setToast] = useState(null);
   const [showPin, setShowPin] = useState(false);
@@ -119,8 +124,11 @@ export default function App() {
     <div className="app">
       <aside className="sidenav">
         <div className="side-brand">
-          <span className="mark">📅</span>
-          <span>The Mood &amp; Mind Centre Admin Roster</span>
+          <span className="mark">🗓️</span>
+          <span className="brand-text">
+            <span className="brand-org">{session.org?.name ?? "RosterME"}</span>
+            <span className="brand-platform">Roster<b>ME</b></span>
+          </span>
         </div>
         <nav className="side-links">
           {tabs.map((t) => (

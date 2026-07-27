@@ -1,6 +1,7 @@
-// AdminRoster API — single edge function with custom PIN auth.
+// RosterME API — single edge function with custom PIN auth, multi-organisation.
 // All DB access happens here with the service-role key; the browser only ever
-// holds a short signed session token, never a database credential.
+// holds a short signed session token, never a database credential. Every tenant
+// row carries an org_id and all reads/writes are scoped to the caller's org.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const supabase = createClient(
@@ -40,7 +41,7 @@ async function sha256Hex(s: string): Promise<string> {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type Session = { sid: string; name: string; adm: boolean; exp: number };
+type Session = { sid: string; name: string; adm: boolean; padm: boolean; oid: string; org: string; exp: number };
 
 async function makeToken(s: Session): Promise<string> {
   const payload = btoa(JSON.stringify(s)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -89,14 +90,35 @@ function* dateRange(start: string, end: string): Generator<string> {
   }
 }
 
-// Materialise shift instances from the fixed weekly template for a date window.
-// A template shift materialises at most once per date, keyed by template_id —
-// NOT by who holds it — so a shift that was swapped to someone else is never
-// regenerated for the original person.
-async function ensureInstances(start: string, end: string) {
+const slugify = (s: string) =>
+  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+
+// Resolve which organisation a pre-login request is for: explicit ?org=slug,
+// else a custom ?host=domain match, else the earliest (primary) organisation.
+async function resolveOrg(url: URL) {
+  const cols = "id, slug, name, short_name, domain";
+  const slug = url.searchParams.get("org");
+  if (slug) {
+    const { data } = await supabase.from("organisations").select(cols)
+      .eq("active", true).eq("slug", slug).maybeSingle();
+    return data;
+  }
+  const host = url.searchParams.get("host");
+  if (host) {
+    const { data } = await supabase.from("organisations").select(cols)
+      .eq("active", true).eq("domain", host).maybeSingle();
+    if (data) return data;
+  }
+  const { data } = await supabase.from("organisations").select(cols)
+    .eq("active", true).order("created_at").limit(1).maybeSingle();
+  return data;
+}
+
+// Materialise shift instances from a single org's fixed weekly template.
+async function ensureInstances(orgId: string, start: string, end: string) {
   const [tplRes, existingRes] = await Promise.all([
-    supabase.from("roster_template").select("*").eq("active", true),
-    supabase.from("shift_instances").select("template_id, shift_date")
+    supabase.from("roster_template").select("*").eq("active", true).eq("org_id", orgId),
+    supabase.from("shift_instances").select("template_id, shift_date").eq("org_id", orgId)
       .gte("shift_date", start).lte("shift_date", end).not("template_id", "is", null),
   ]);
   if (tplRes.error) throw tplRes.error;
@@ -109,6 +131,7 @@ async function ensureInstances(start: string, end: string) {
       if (t.day_of_week !== dow) continue;
       if (have.has(`${t.id}|${date}`)) continue;
       rows.push({
+        org_id: orgId,
         template_id: t.id,
         staff_id: t.staff_id,
         shift_date: date,
@@ -147,11 +170,21 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ---------- public ----------
-    if (path === "/bootstrap" && req.method === "GET") {
-      const { data, error } = await supabase
-        .from("staff").select("id, name").eq("active", true).order("name");
+    // list organisations (workplaces) so the login screen can offer a chooser
+    if (path === "/orgs" && req.method === "GET") {
+      const { data, error } = await supabase.from("organisations")
+        .select("id, slug, name, short_name, domain").eq("active", true).order("name");
       if (error) throw error;
-      return json({ staff: data });
+      return json({ organisations: data });
+    }
+
+    if (path === "/bootstrap" && req.method === "GET") {
+      const org = await resolveOrg(url);
+      if (!org) return json({ error: "Unknown workplace" }, 404);
+      const { data, error } = await supabase
+        .from("staff").select("id, name").eq("active", true).eq("org_id", org.id).order("name");
+      if (error) throw error;
+      return json({ org, staff: data });
     }
 
     if (path === "/login" && req.method === "POST") {
@@ -159,7 +192,8 @@ Deno.serve(async (req: Request) => {
       if (!staffId || !pin) return json({ error: "Missing staffId or pin" }, 400);
       if (throttled(staffId)) return json({ error: "Too many attempts. Try again in 10 minutes." }, 429);
       const { data: staff, error } = await supabase
-        .from("staff").select("*").eq("id", staffId).eq("active", true).single();
+        .from("staff").select("*, org:organisations(id, slug, name, short_name)")
+        .eq("id", staffId).eq("active", true).single();
       if (error || !staff?.pin_hash) return json({ error: "Invalid login" }, 401);
       const [salt, hash] = staff.pin_hash.split("$");
       if (await sha256Hex(`${salt}:${pin}`) !== hash) {
@@ -168,12 +202,14 @@ Deno.serve(async (req: Request) => {
       }
       failures.delete(staffId);
       const session: Session = {
-        sid: staff.id, name: staff.name, adm: staff.is_admin,
+        sid: staff.id, name: staff.name, adm: staff.is_admin, padm: staff.is_platform_admin,
+        oid: staff.org_id, org: staff.org.slug,
         exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400,
       };
       return json({
         token: await makeToken(session),
-        staff: { id: staff.id, name: staff.name, isAdmin: staff.is_admin },
+        staff: { id: staff.id, name: staff.name, isAdmin: staff.is_admin, isPlatformAdmin: staff.is_platform_admin },
+        org: staff.org,
       });
     }
 
@@ -182,7 +218,7 @@ Deno.serve(async (req: Request) => {
     if (!me) return json({ error: "Not signed in" }, 401);
 
     if (path === "/me" && req.method === "GET") {
-      return json({ staff: { id: me.sid, name: me.name, isAdmin: me.adm } });
+      return json({ staff: { id: me.sid, name: me.name, isAdmin: me.adm, isPlatformAdmin: me.padm } });
     }
 
     if (path === "/change-pin" && req.method === "POST") {
@@ -198,9 +234,9 @@ Deno.serve(async (req: Request) => {
 
     if (path === "/meta" && req.method === "GET") {
       const [locs, roles, staff] = await Promise.all([
-        supabase.from("locations").select("*").order("name"),
-        supabase.from("roles").select("*").order("name"),
-        supabase.from("staff").select("id, name, contract_hours, is_admin, active").order("name"),
+        supabase.from("locations").select("*").eq("org_id", me.oid).order("name"),
+        supabase.from("roles").select("*").eq("org_id", me.oid).order("name"),
+        supabase.from("staff").select("id, name, contract_hours, is_admin, active").eq("org_id", me.oid).order("name"),
       ]);
       if (locs.error || roles.error || staff.error) throw locs.error ?? roles.error ?? staff.error;
       return json({ locations: locs.data, roles: roles.data, staff: staff.data });
@@ -214,13 +250,13 @@ Deno.serve(async (req: Request) => {
       }
       const span = (new Date(end).getTime() - new Date(start).getTime()) / 86400000;
       if (span < 0 || span > 70) return json({ error: "Range too large" }, 400);
-      await ensureInstances(start, end);
+      await ensureInstances(me.oid, start, end);
       const [shifts, unavail] = await Promise.all([
-        supabase.from("shift_instances").select(SHIFT_SELECT)
+        supabase.from("shift_instances").select(SHIFT_SELECT).eq("org_id", me.oid)
           .gte("shift_date", start).lte("shift_date", end)
           .neq("status", "cancelled")
           .order("shift_date").order("start_time"),
-        supabase.from("unavailability").select("*, staff:staff(id, name)")
+        supabase.from("unavailability").select("*, staff:staff(id, name)").eq("org_id", me.oid)
           .lte("start_date", end).gte("end_date", start),
       ]);
       if (shifts.error || unavail.error) throw shifts.error ?? unavail.error;
@@ -232,7 +268,8 @@ Deno.serve(async (req: Request) => {
       const target = me.adm && url.searchParams.get("staffId")
         ? url.searchParams.get("staffId")! : me.sid;
       const all = me.adm && url.searchParams.get("all") === "1";
-      let q = supabase.from("availability").select("*, staff:staff(id, name)").order("day_of_week");
+      let q = supabase.from("availability").select("*, staff:staff(id, name)")
+        .eq("org_id", me.oid).order("day_of_week");
       if (!all) q = q.eq("staff_id", target);
       const { data, error } = await q;
       if (error) throw error;
@@ -245,7 +282,7 @@ Deno.serve(async (req: Request) => {
         day_of_week: number; is_available: boolean;
         available_from: string | null; available_to: string | null; note: string | null;
       }>;
-      const rows = days.map((d) => ({ ...d, staff_id: target, updated_at: new Date().toISOString() }));
+      const rows = days.map((d) => ({ ...d, staff_id: target, org_id: me.oid, updated_at: new Date().toISOString() }));
       const { error } = await supabase
         .from("availability").upsert(rows, { onConflict: "staff_id,day_of_week" });
       if (error) throw error;
@@ -255,7 +292,7 @@ Deno.serve(async (req: Request) => {
     if (path === "/unavailability" && req.method === "GET") {
       const all = me.adm && url.searchParams.get("all") === "1";
       let q = supabase.from("unavailability")
-        .select("*, staff:staff(id, name)").order("start_date", { ascending: false });
+        .select("*, staff:staff(id, name)").eq("org_id", me.oid).order("start_date", { ascending: false });
       if (!all) q = q.eq("staff_id", me.sid);
       const { data, error } = await q;
       if (error) throw error;
@@ -266,14 +303,14 @@ Deno.serve(async (req: Request) => {
       const target = me.adm && body.staffId ? body.staffId : me.sid;
       const { start_date, end_date, note } = body;
       const { error } = await supabase
-        .from("unavailability").insert({ staff_id: target, start_date, end_date, note });
+        .from("unavailability").insert({ staff_id: target, org_id: me.oid, start_date, end_date, note });
       if (error) throw error;
       return json({ ok: true });
     }
 
     if (path === "/unavailability" && req.method === "DELETE") {
       const id = url.searchParams.get("id")!;
-      let q = supabase.from("unavailability").delete().eq("id", id);
+      let q = supabase.from("unavailability").delete().eq("id", id).eq("org_id", me.oid);
       if (!me.adm) q = q.eq("staff_id", me.sid);
       const { error } = await q;
       if (error) throw error;
@@ -283,7 +320,7 @@ Deno.serve(async (req: Request) => {
     // ---------- swap offers ----------
     if (path === "/offers" && req.method === "GET") {
       const { data, error } = await supabase.from("swap_offers")
-        .select(OFFER_SELECT).order("created_at", { ascending: false });
+        .select(OFFER_SELECT).eq("org_id", me.oid).order("created_at", { ascending: false });
       if (error) throw error;
       return json({ offers: data });
     }
@@ -291,7 +328,7 @@ Deno.serve(async (req: Request) => {
     if (path === "/offers" && req.method === "POST") {
       const { shiftInstanceId, note } = body;
       const { data: shift, error: sErr } = await supabase
-        .from("shift_instances").select("*").eq("id", shiftInstanceId).single();
+        .from("shift_instances").select("*").eq("id", shiftInstanceId).eq("org_id", me.oid).single();
       if (sErr || !shift) return json({ error: "Shift not found" }, 404);
       if (shift.staff_id !== me.sid && !me.adm) {
         return json({ error: "You can only offer your own shifts" }, 403);
@@ -304,7 +341,7 @@ Deno.serve(async (req: Request) => {
         .in("status", ["open", "pending_approval"]);
       if (existing?.length) return json({ error: "This shift already has an active offer" }, 409);
       const { error } = await supabase.from("swap_offers").insert({
-        shift_instance_id: shiftInstanceId, offered_by: shift.staff_id, offer_note: note ?? null,
+        shift_instance_id: shiftInstanceId, offered_by: shift.staff_id, org_id: me.oid, offer_note: note ?? null,
       });
       if (error) throw error;
       return json({ ok: true });
@@ -314,7 +351,7 @@ Deno.serve(async (req: Request) => {
     if (offerAction && req.method === "POST") {
       const [, id, action] = offerAction;
       const { data: offer, error: oErr } = await supabase
-        .from("swap_offers").select("*").eq("id", id).single();
+        .from("swap_offers").select("*").eq("id", id).eq("org_id", me.oid).single();
       if (oErr || !offer) return json({ error: "Offer not found" }, 404);
       const now = new Date().toISOString();
 
@@ -370,14 +407,56 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ---------- admin ----------
+    // ---------- platform admin: manage organisations ----------
+    if (path === "/platform/orgs" && req.method === "GET") {
+      if (!me.padm) return json({ error: "Platform admin only" }, 403);
+      const { data: orgs, error } = await supabase.from("organisations")
+        .select("id, slug, name, short_name, domain, active, created_at").order("created_at");
+      if (error) throw error;
+      const { data: counts } = await supabase.from("staff").select("org_id");
+      const byOrg: Record<string, number> = {};
+      for (const r of counts ?? []) byOrg[r.org_id] = (byOrg[r.org_id] ?? 0) + 1;
+      return json({ organisations: (orgs ?? []).map((o) => ({ ...o, staff_count: byOrg[o.id] ?? 0 })) });
+    }
+
+    if (path === "/platform/orgs" && req.method === "POST") {
+      if (!me.padm) return json({ error: "Platform admin only" }, 403);
+      const { name, short_name, domain, adminName, adminPin } = body;
+      if (!name || !adminName) return json({ error: "Organisation name and first admin name are required" }, 400);
+      if (!/^\d{4}$/.test(adminPin ?? "")) return json({ error: "Admin PIN must be exactly 4 digits" }, 400);
+      let slug = slugify(body.slug || name);
+      if (!slug) return json({ error: "Could not derive a workplace code from the name" }, 400);
+      // ensure the slug is unique
+      const { data: clash } = await supabase.from("organisations").select("id").eq("slug", slug).maybeSingle();
+      if (clash) slug = `${slug}-${crypto.randomUUID().slice(0, 4)}`;
+
+      const { data: org, error: orgErr } = await supabase.from("organisations")
+        .insert({ slug, name, short_name: short_name || null, domain: domain || null })
+        .select("id, slug, name, short_name").single();
+      if (orgErr) {
+        if (String(orgErr.code) === "23505") return json({ error: "That domain is already used by another workplace" }, 409);
+        throw orgErr;
+      }
+      // seed a starter location + role so the new org can roster immediately
+      await supabase.from("locations").insert({ org_id: org.id, name: "Main" });
+      await supabase.from("roles").insert({ org_id: org.id, name: "Staff" });
+      // first admin for the new org
+      const salt = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+      const pin_hash = `${salt}$${await sha256Hex(`${salt}:${adminPin}`)}`;
+      const { error: staffErr } = await supabase.from("staff")
+        .insert({ org_id: org.id, name: adminName, contract_hours: 0, is_admin: true, active: true, pin_hash });
+      if (staffErr) throw staffErr;
+      return json({ ok: true, org });
+    }
+
+    // ---------- org admin ----------
     if (path.startsWith("/admin/")) {
       if (!me.adm) return json({ error: "Admin only" }, 403);
 
       if (path === "/admin/template" && req.method === "GET") {
         const { data, error } = await supabase.from("roster_template")
           .select("*, location:locations(name), role:roles(name), staff:staff(id, name)")
-          .eq("active", true)
+          .eq("active", true).eq("org_id", me.oid)
           .order("day_of_week").order("start_time");
         if (error) throw error;
         return json({ template: data });
@@ -388,7 +467,7 @@ Deno.serve(async (req: Request) => {
         if (!staff_id || !location_id || !role_id) return json({ error: "Staff, location and role are required" }, 400);
         if (end_time <= start_time) return json({ error: "End time must be after start time" }, 400);
         const { error } = await supabase.from("roster_template")
-          .insert({ staff_id, day_of_week, start_time, end_time, location_id, role_id });
+          .insert({ staff_id, day_of_week, start_time, end_time, location_id, role_id, org_id: me.oid });
         if (error) throw error;
         return json({ ok: true });
       }
@@ -400,26 +479,24 @@ Deno.serve(async (req: Request) => {
         if (end_time <= start_time) return json({ error: "End time must be after start time" }, 400);
         const { error } = await supabase.from("roster_template")
           .update({ staff_id, day_of_week, start_time, end_time, location_id, role_id })
-          .eq("id", id);
+          .eq("id", id).eq("org_id", me.oid);
         if (error) throw error;
         return json({ ok: true });
       }
 
       if (path === "/admin/template" && req.method === "DELETE") {
         const id = url.searchParams.get("id")!;
-        const { error } = await supabase.from("roster_template").delete().eq("id", id);
+        const { error } = await supabase.from("roster_template").delete().eq("id", id).eq("org_id", me.oid);
         if (error) throw error;
         return json({ ok: true });
       }
 
       if (path === "/admin/regenerate" && req.method === "POST") {
         const { start, end } = body;
-        // wipe untouched (non-swapped) generated shifts in the window; they re-materialise
-        // from the current template on the next calendar load
-        const { error } = await supabase.from("shift_instances")
-          .delete().gte("shift_date", start).lte("shift_date", end).eq("status", "scheduled");
+        const { error } = await supabase.from("shift_instances").delete().eq("org_id", me.oid)
+          .gte("shift_date", start).lte("shift_date", end).eq("status", "scheduled");
         if (error) throw error;
-        await ensureInstances(start, end);
+        await ensureInstances(me.oid, start, end);
         return json({ ok: true });
       }
 
@@ -437,10 +514,11 @@ Deno.serve(async (req: Request) => {
           patch.pin_hash = `${salt}$${await sha256Hex(`${salt}:${pin}`)}`;
         }
         if (id) {
-          const { error } = await supabase.from("staff").update(patch).eq("id", id);
+          const { error } = await supabase.from("staff").update(patch).eq("id", id).eq("org_id", me.oid);
           if (error) throw error;
         } else {
           if (!patch.name || !patch.pin_hash) return json({ error: "New staff need a name and PIN" }, 400);
+          patch.org_id = me.oid;
           const { error } = await supabase.from("staff").insert(patch);
           if (error) throw error;
         }

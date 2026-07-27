@@ -217,6 +217,41 @@ button { font-family: inherit; }
 }
 .name-card:active { transform: scale(0.96); background: rgba(255,255,255,0.18); }
 .login .error { color: #ffc0b8; font-weight: 600; min-height: 22px; font-size: 14px; }
+.login .load-note { color: #bce0d5; font-weight: 600; grid-column: 1 / -1; text-align: center; }
+
+.wordmark { color: #fff; font-size: 30px; font-weight: 800; letter-spacing: -0.6px; animation: fade-up 0.4s 0.05s ease both; }
+.wordmark span { color: #ffd66b; }
+
+/* workplace chooser */
+.org-grid {
+  display: grid; grid-template-columns: 1fr; gap: 11px;
+  width: 100%; max-width: 400px; animation: fade-up 0.4s 0.15s ease both;
+}
+.org-card {
+  display: flex; align-items: center; gap: 14px; text-align: left;
+  padding: 16px 16px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.09); color: #fff; cursor: pointer; font-family: inherit;
+  transition: transform 0.12s, background 0.15s;
+}
+.org-card:hover { background: rgba(255,255,255,0.16); }
+.org-card:active { transform: scale(0.98); }
+.org-card .org-name { font-size: 16px; font-weight: 800; }
+.org-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 46px; height: 46px; border-radius: 14px; font-weight: 800; font-size: 15px;
+  background: #ffd66b; color: #2a2000; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.org-badge.sm { width: 30px; height: 30px; border-radius: 9px; font-size: 11px; }
+
+.org-context {
+  display: flex; align-items: center; gap: 9px; color: #eafaf3; font-weight: 700; font-size: 14px;
+  animation: fade-up 0.4s 0.1s ease both; margin-top: -6px;
+}
+.org-context .switch-org {
+  background: rgba(255,255,255,0.16); border: none; color: #fff; font-weight: 700; font-size: 12px;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer; font-family: inherit;
+}
+.org-context .switch-org:hover { background: rgba(255,255,255,0.28); }
 
 .pin-hero { display: flex; flex-direction: column; align-items: center; gap: 12px; animation: fade-up 0.3s ease both; }
 .pin-display { display: flex; gap: 16px; height: 20px; margin-top: 6px; }
@@ -572,6 +607,23 @@ select:focus, input:focus { outline: none; border-color: var(--brand-light); bac
 .balance-bar .fill.on { background: var(--brand); }
 .balance-bar .fill.muted { background: #c7cdcb; }
 
+/* ---- platform: organisations ---- */
+.plat-tag {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--brand-soft); color: var(--brand-deep); padding: 3px 8px; border-radius: 999px;
+  margin-left: 8px; vertical-align: middle;
+}
+.list-row .org-badge, .balance-row .org-badge {
+  width: 34px; height: 34px; border-radius: 10px; font-size: 12px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); color: var(--brand-deep); font-weight: 800; text-transform: uppercase;
+}
+.list-row .sub code {
+  background: #eef1f0; padding: 1px 6px; border-radius: 6px; font-size: 11.5px; font-weight: 700;
+}
+.org-add { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 14px; }
+.mini-label { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
+
 /* ---- printable roster ---- */
 .print-roster { display: none; }
 @media print {
@@ -622,13 +674,13 @@ select:focus, input:focus { outline: none; border-color: var(--brand-light); bac
   html, body { background: #e7ece9; }
 
   .app {
-    max-width: 1340px;
+    max-width: none;
+    width: 100%;
     display: grid;
-    grid-template-columns: 250px minmax(0, 1fr);
+    grid-template-columns: 260px minmax(0, 1fr);
     align-items: stretch;
     min-height: 100vh;
     background: var(--bg);
-    box-shadow: 0 0 60px rgba(10, 40, 32, 0.12);
   }
 
   .tabbar, .footer-note { display: none; }
@@ -644,16 +696,23 @@ select:focus, input:focus { outline: none; border-color: var(--brand-light); bac
     position: sticky; top: 0; height: 100vh;
   }
   .side-brand {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 17px; font-weight: 800; letter-spacing: -0.3px;
-    padding: 0 10px 26px;
+    display: flex; align-items: center; gap: 11px;
+    padding: 0 8px 24px;
   }
   .side-brand .mark {
     width: 38px; height: 38px; border-radius: 12px;
     background: rgba(255,255,255,0.14);
     display: flex; align-items: center; justify-content: center;
-    font-size: 19px;
+    font-size: 19px; flex-shrink: 0;
   }
+  .side-brand .brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+  .side-brand .brand-org {
+    font-size: 15.5px; font-weight: 800; letter-spacing: -0.2px; color: #fff;
+  }
+  .side-brand .brand-platform {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.3px; color: #9fd3c4; margin-top: 2px;
+  }
+  .side-brand .brand-platform b { color: #ffd66b; font-weight: 800; }
   .side-links { display: flex; flex-direction: column; gap: 4px; flex: 1; }
   .side-links button {
     display: flex; align-items: center; gap: 12px;

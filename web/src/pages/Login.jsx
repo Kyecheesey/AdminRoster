@@ -3,45 +3,99 @@ import { api } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
 
 export default function Login({ onLogin }) {
-  const [staff, setStaff] = useState(null);
+  const [orgs, setOrgs] = useState(null);   // list of workplaces, or null while loading
+  const [org, setOrg] = useState(null);      // chosen workplace
+  const [staff, setStaff] = useState(null);  // staff for the chosen workplace
   const [picked, setPicked] = useState(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // 1. load the workplace directory; auto-select by domain, or if there's only one
   useEffect(() => {
-    api("/bootstrap")
-      .then((d) => setStaff(d.staff))
-      .catch(() => setError("Could not load staff list. Check your connection."));
+    api("/orgs")
+      .then((d) => {
+        const list = d.organisations ?? [];
+        setOrgs(list);
+        const byDomain = list.find((o) => o.domain && o.domain === window.location.hostname);
+        if (byDomain) setOrg(byDomain);
+        else if (list.length === 1) setOrg(list[0]);
+      })
+      .catch(() => setError("Could not load workplaces. Check your connection."));
   }, []);
 
+  // 2. once a workplace is chosen, load its staff
+  useEffect(() => {
+    if (!org) return;
+    setStaff(null);
+    api(`/bootstrap?org=${encodeURIComponent(org.slug)}`)
+      .then((d) => setStaff(d.staff))
+      .catch(() => setError("Could not load the staff list. Check your connection."));
+  }, [org]);
+
+  // 3. auto-submit the PIN on the 4th digit
   useEffect(() => {
     if (pin.length !== 4 || !picked || busy) return;
     setBusy(true);
-    api("/login", { method: "POST", body: { staffId: picked.id, pin } })
+    api("/login", { method: "POST", body: { staffId: picked.id, pin, org: org?.slug } })
       .then((d) => onLogin(d))
       .catch((e) => {
         setError(e.message);
         setPin("");
       })
       .finally(() => setBusy(false));
-  }, [pin, picked, busy, onLogin]);
+  }, [pin, picked, busy, onLogin, org]);
 
   const press = (d) => {
     setError("");
     if (pin.length < 4) setPin(pin + d);
   };
 
+  const Wordmark = () => (
+    <>
+      <div className="brandmark">🗓️</div>
+      <h1 className="wordmark">Roster<span>ME</span></h1>
+    </>
+  );
+
+  // --- step A: choose a workplace ---
+  if (!org) {
+    return (
+      <div className="login">
+        <Wordmark />
+        <p className="subtitle">Choose your workplace</p>
+        <div className="org-grid">
+          {orgs === null && <p className="load-note">Loading…</p>}
+          {orgs?.length === 0 && <p className="load-note">No workplaces set up yet.</p>}
+          {orgs?.map((o) => (
+            <button key={o.id} className="org-card" onClick={() => { setOrg(o); setError(""); }}>
+              <span className="org-badge">{(o.short_name || o.name).slice(0, 3)}</span>
+              <span className="org-name">{o.name}</span>
+            </button>
+          ))}
+        </div>
+        <p className="error">{error}</p>
+      </div>
+    );
+  }
+
+  // --- step B: choose who's signing in ---
   if (!picked) {
     return (
       <div className="login">
-        <div className="brandmark">📅</div>
-        <h1>The Mood &amp; Mind Centre Admin Roster</h1>
+        <Wordmark />
+        <p className="org-context">
+          <span className="org-badge sm">{(org.short_name || org.name).slice(0, 3)}</span>
+          {org.name}
+          {orgs && orgs.length > 1 && (
+            <button className="switch-org" onClick={() => { setOrg(null); setStaff(null); setError(""); }}>
+              Change
+            </button>
+          )}
+        </p>
         <p className="subtitle">Who's signing in?</p>
         <div className="name-grid">
-          {staff === null && (
-            <p style={{ color: "#bcc1ef", gridColumn: "1/-1", textAlign: "center" }}>Loading…</p>
-          )}
+          {staff === null && <p className="load-note">Loading…</p>}
           {staff?.map((s) => (
             <button key={s.id} className="name-card" onClick={() => { setPicked(s); setError(""); }}>
               <Avatar name={s.name} />
@@ -54,6 +108,7 @@ export default function Login({ onLogin }) {
     );
   }
 
+  // --- step C: enter PIN ---
   return (
     <div className="login">
       <div className="pin-hero">
