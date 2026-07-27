@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
-import { LogoMark } from "../components/Logo.jsx";
+import { LogoMark, OrgLogo, hasOrgLogo } from "../components/Logo.jsx";
 
 function Banner({ error }) {
   if (!error) return <div className="login-status" />;
@@ -109,9 +109,13 @@ export default function Login({ onLogin }) {
   if (!picked) {
     return (
       <div className="login">
-        <Wordmark />
+        {hasOrgLogo(org.slug) ? (
+          <div className="login-org-logo"><OrgLogo slug={org.slug} /></div>
+        ) : (
+          <Wordmark />
+        )}
         <p className="org-context">
-          <span className="org-badge sm">{(org.short_name || org.name).slice(0, 3)}</span>
+          {!hasOrgLogo(org.slug) && <span className="org-badge sm">{(org.short_name || org.name).slice(0, 3)}</span>}
           {org.name}
           <button className="switch-org" onClick={() => { setOrg(null); setStaff(null); setEntry(""); setError(""); }}>
             Change

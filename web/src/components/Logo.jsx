@@ -32,4 +32,31 @@ export function Wordmark({ className = "" }) {
   return <span className={`wordmark ${className}`.trim()}>Roster<span>ME</span></span>;
 }
 
+// The Mood & Mind Centre wordmark.
+function MoodMindLogo() {
+  return (
+    <svg viewBox="0 0 320 66" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Mood & Mind Centre" style={{ width: "100%", height: "auto", display: "block" }}>
+      <text x="160" y="36" textAnchor="middle" fontFamily="Georgia, 'Times New Roman', serif" fontSize="28" fill="#33413a">
+        The Mood <tspan fill="#5f8f72" fontStyle="italic">&amp; Mind</tspan>
+      </text>
+      <text x="160" y="57" textAnchor="middle" fontFamily="Georgia, serif" fontSize="12.5" letterSpacing="6" fill="#5f8f72">CENTRE</text>
+    </svg>
+  );
+}
+
+// Per-workplace branding: returns a logo element for an organisation, or null.
+// Keyed by workplace code (slug) so each org can carry its own identity.
+const ORG_LOGOS = {
+  mm: MoodMindLogo,
+};
+
+export function OrgLogo({ slug }) {
+  const Logo = ORG_LOGOS[slug];
+  return Logo ? <Logo /> : null;
+}
+
+export function hasOrgLogo(slug) {
+  return Boolean(ORG_LOGOS[slug]);
+}
+
 export default LogoMark;
