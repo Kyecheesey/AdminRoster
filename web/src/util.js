@@ -38,6 +38,17 @@ export function fmtDate(s) {
   return d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
 }
 
+// the Sunday that ends the week containing `from` (roster "week ending" anchor)
+export function weekEndingIso(fromIso = todayIso()) {
+  return addDays(fromIso, 6 - dowOf(fromIso));
+}
+
+// "26 May" — the day/month for a date, used under weekday headers
+export function dayMonth(s) {
+  const d = parseIso(s);
+  return d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+}
+
 export function fmtDateLong(s) {
   const d = parseIso(s);
   return d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });

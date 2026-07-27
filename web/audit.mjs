@@ -157,6 +157,7 @@ async function handle(route) {
     state.template = state.template.filter((t) => t.id !== url.searchParams.get("id"));
     return reply({ ok: true });
   }
+  if (p === "/admin/template/clear") { state.template = []; return reply({ ok: true }); }
   if (p === "/admin/regenerate") return reply({ ok: true });
   if (p === "/admin/staff") return reply({ ok: true });
   if (p === "/change-pin" && method === "POST") {
@@ -172,6 +173,7 @@ const server = await createServer({ root: "/home/user/AdminRoster/web", server: 
 await server.listen();
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+page.on("dialog", (d) => d.accept()); // auto-confirm start-fresh / build prompts
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 page.on("console", (m) => {
@@ -313,6 +315,17 @@ await page.locator(".timeoff-row.pending").first().getByRole("button", { name: "
 await page.waitForTimeout(400);
 const uo1 = state.unavailability.find((u) => u.id === "uo1");
 check("holiday approved with comment", uo1.status === "approved" && uo1.admin_note === "Enjoy!");
+
+// 9g. build-roster section: week-ending anchor + build
+check("build-roster section present", await page.getByText("Week ending").first().isVisible());
+await page.getByRole("button", { name: "Build 8 weeks from here" }).click();
+await page.waitForTimeout(400);
+check("build triggers regenerate", state.posts.includes("POST /admin/regenerate"));
+
+// 9h. start a fresh roster clears the weekly pattern
+await page.getByRole("button", { name: "Start fresh" }).click();
+await page.waitForTimeout(500);
+check("start fresh clears the roster", state.template.length === 0);
 
 // 10. change own PIN from footer
 await page.getByRole("button", { name: "Calendar" }).click();

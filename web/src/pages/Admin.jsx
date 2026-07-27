@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api.js";
-import { DAY_NAMES, fmtTime, fmtDate, todayIso, addDays, hoursBetween } from "../util.js";
+import { DAY_NAMES, fmtTime, fmtDate, fmtDateLong, todayIso, addDays, hoursBetween, weekEndingIso, dayMonth } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
 
 const blankShift = { id: null, staff_id: "", day_of_week: 0, start_time: "08:00", end_time: "13:00", location_id: "", role_id: "" };
@@ -161,6 +161,8 @@ export default function Admin({ me, notify, onLogout }) {
   const [orgForm, setOrgForm] = useState({ name: "", short_name: "", domain: "", adminName: "", adminPin: "" });
   const [timeOff, setTimeOff] = useState(null); // all staff holiday requests
   const [reviewNote, setReviewNote] = useState({}); // per-request comment draft
+  const [weekEnding, setWeekEnding] = useState(weekEndingIso()); // Sunday the roster is built to
+  const weekStart = addDays(weekEnding, -6); // Monday of the selected week
 
   const loadOrgs = () => {
     if (!me.isPlatformAdmin) return;
@@ -214,11 +216,21 @@ export default function Admin({ me, notify, onLogout }) {
   });
   const onSaved = () => { setEditing(null); load(); };
 
-  const applyTemplate = () => {
-    if (!confirm("Re-apply the fixed roster to the next 8 weeks? Unswapped shifts will be rebuilt from the template. Approved swaps are kept.")) return;
+  const applyFromWeek = () => {
+    const start = weekStart < todayIso() ? todayIso() : weekStart;
+    if (!confirm(`Build the roster for the 8 weeks from ${fmtDateLong(start)}? Unswapped shifts are rebuilt from the roster; approved swaps are kept.`)) return;
     setBusy(true);
-    api("/admin/regenerate", { method: "POST", body: { start: todayIso(), end: addDays(todayIso(), 55) } })
-      .then(() => notify("Roster re-applied for the next 8 weeks."))
+    api("/admin/regenerate", { method: "POST", body: { start, end: addDays(start, 55) } })
+      .then(() => notify(`Roster built for the 8 weeks from ${fmtDate(start)}.`))
+      .catch((e) => notify(e.message))
+      .finally(() => setBusy(false));
+  };
+
+  const startFresh = () => {
+    if (!confirm("Start a fresh roster? This clears every shift in the weekly roster and removes upcoming auto-generated shifts so you can build a new one from scratch. Approved swaps are kept. This cannot be undone.")) return;
+    setBusy(true);
+    api("/admin/template/clear", { method: "POST" })
+      .then(() => { notify("Fresh roster started — the week is now empty."); load(); })
       .catch((e) => notify(e.message))
       .finally(() => setBusy(false));
   };
@@ -297,6 +309,26 @@ export default function Admin({ me, notify, onLogout }) {
         </div>
       </div>
 
+      <p className="section-title">Build roster</p>
+      <div className="card roster-setup">
+        <div className="setup-main">
+          <div className="setup-field">
+            <label>Week ending</label>
+            <input type="date" value={weekEnding} onChange={(e) => setWeekEnding(e.target.value || weekEndingIso())} />
+          </div>
+          <div className="setup-desc">
+            <strong>{fmtDate(weekStart)} → {fmtDate(weekEnding)}</strong>
+            <span>Pick the week this roster is for. Day columns below show that week's dates.</span>
+          </div>
+        </div>
+        <div className="setup-actions">
+          <button className="btn secondary" onClick={startFresh} disabled={busy}>Start fresh</button>
+          <button className="btn" onClick={applyFromWeek} disabled={busy}>
+            {busy ? "Working…" : "Build 8 weeks from here"}
+          </button>
+        </div>
+      </div>
+
       <div className="roster-toolbar">
         <p className="section-title" style={{ margin: 0 }}>Weekly roster</p>
         <div className="row" style={{ gap: 8 }}>
@@ -318,7 +350,7 @@ export default function Admin({ me, notify, onLogout }) {
               <div className="card" key={dow}>
                 <div className="day-head-row">
                   <span className="bar" />
-                  <h3>{day}</h3>
+                  <h3>{day} <span className="day-date">{dayMonth(addDays(weekStart, dow))}</span></h3>
                   <span className="day-meta">
                     {rows.length} {rows.length === 1 ? "shift" : "shifts"} · {dayHours(rows)}h
                   </span>
@@ -434,19 +466,6 @@ export default function Admin({ me, notify, onLogout }) {
           </>
         );
       })()}
-
-      <div className="cards-grid">
-        <div className="card">
-          <h3>Apply roster changes</h3>
-          <p style={{ fontSize: 13, color: "var(--muted)", fontWeight: 500, marginBottom: 12 }}>
-            Roster changes apply automatically to future weeks as they're viewed. Use this to force-rebuild
-            the next 8 weeks now (approved swaps are kept).
-          </p>
-          <button className="btn" onClick={applyTemplate} disabled={busy}>
-            {busy ? "Applying…" : "Re-apply next 8 weeks"}
-          </button>
-        </div>
-      </div>
 
       <p className="section-title">Staff</p>
       <div className="card">

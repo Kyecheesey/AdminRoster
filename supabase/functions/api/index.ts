@@ -524,6 +524,18 @@ Deno.serve(async (req: Request) => {
         return json({ ok: true });
       }
 
+      if (path === "/admin/template/clear" && req.method === "POST") {
+        // start a fresh roster: wipe the weekly pattern and any future
+        // auto-generated shifts (approved swaps are left untouched)
+        const today = new Date().toISOString().slice(0, 10);
+        const del = await supabase.from("shift_instances").delete()
+          .eq("org_id", me.oid).gte("shift_date", today).eq("status", "scheduled");
+        if (del.error) throw del.error;
+        const { error } = await supabase.from("roster_template").delete().eq("org_id", me.oid);
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
       if (path === "/admin/regenerate" && req.method === "POST") {
         const { start, end } = body;
         const { error } = await supabase.from("shift_instances").delete().eq("org_id", me.oid)

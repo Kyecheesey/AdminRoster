@@ -540,6 +540,21 @@ select:focus, input:focus { outline: none; border-color: var(--brand-light); bac
   background: var(--brand-soft); color: var(--brand-deep);
   padding: 3px 9px; border-radius: 999px; white-space: nowrap;
 }
+.day-head-row .day-date { font-weight: 600; color: var(--muted); font-size: 12.5px; margin-left: 5px; }
+
+/* roster setup / build */
+.roster-setup {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.setup-main { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.setup-field { display: flex; flex-direction: column; gap: 5px; }
+.setup-field > label {
+  font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px;
+}
+.setup-desc { display: flex; flex-direction: column; gap: 2px; }
+.setup-desc strong { font-weight: 800; font-size: 14.5px; }
+.setup-desc span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.setup-actions { display: flex; gap: 9px; flex-wrap: wrap; }
 
 .shift-chip {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
