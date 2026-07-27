@@ -6,6 +6,7 @@ import Availability from "./pages/Availability.jsx";
 import Offers from "./pages/Offers.jsx";
 import Admin from "./pages/Admin.jsx";
 import Avatar from "./components/Avatar.jsx";
+import { LogoMark } from "./components/Logo.jsx";
 
 const ICONS = {
   calendar: (active) => (
@@ -124,7 +125,7 @@ export default function App() {
     <div className="app">
       <aside className="sidenav">
         <div className="side-brand">
-          <span className="mark">🗓️</span>
+          <span className="mark"><LogoMark size={38} idSuffix="-nav" /></span>
           <span className="brand-text">
             <span className="brand-org">{session.org?.name ?? "RosterME"}</span>
             <span className="brand-platform">Roster<b>ME</b></span>

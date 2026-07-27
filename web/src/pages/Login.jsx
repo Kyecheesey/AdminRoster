@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
+import { LogoMark } from "../components/Logo.jsx";
 
 export default function Login({ onLogin }) {
   const [orgs, setOrgs] = useState(null);   // list of workplaces, or null while loading
@@ -53,7 +54,7 @@ export default function Login({ onLogin }) {
 
   const Wordmark = () => (
     <>
-      <div className="brandmark">🗓️</div>
+      <div className="brandmark"><LogoMark size={72} idSuffix="-login" /></div>
       <h1 className="wordmark">Roster<span>ME</span></h1>
     </>
   );
