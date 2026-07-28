@@ -32,31 +32,103 @@ export function Wordmark({ className = "" }) {
   return <span className={`wordmark ${className}`.trim()}>Roster<span>ME</span></span>;
 }
 
-// The Mood & Mind Centre wordmark.
-function MoodMindLogo() {
+/* ==========================================================================
+   The Mood & Mind Centre
+   ========================================================================== */
+
+const SERIF = "Georgia, 'Times New Roman', Times, serif";
+
+// Two overlapping circles — mood and mind, meeting in the middle. The lens
+// where they cross deepens on its own because both are semi-transparent, so
+// the mark reads correctly on white, on the sage tile and in print.
+// The two discs are drawn at a fixed ratio wherever they appear: centres 1.2
+// radii apart, so the lens is unmistakable but the circles stay legible as two.
+function Discs({ cx = 32, cy = 32, r = 15 }) {
+  const d = r * 0.6;
   return (
-    <svg viewBox="0 0 320 66" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Mood & Mind Centre" style={{ width: "100%", height: "auto", display: "block" }}>
-      <text x="160" y="36" textAnchor="middle" fontFamily="Georgia, 'Times New Roman', serif" fontSize="28" fill="#33413a">
-        The Mood <tspan fill="#5f8f72" fontStyle="italic">&amp; Mind</tspan>
-      </text>
-      <text x="160" y="57" textAnchor="middle" fontFamily="Georgia, serif" fontSize="12.5" letterSpacing="6" fill="#5f8f72">CENTRE</text>
+    <>
+      <circle cx={cx - d} cy={cy} r={r} fill="#7fae90" fillOpacity="0.88" />
+      <circle cx={cx + d} cy={cy} r={r} fill="#3f6f52" fillOpacity="0.74" />
+    </>
+  );
+}
+
+export function MoodMindMark({ size = 44 }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 64 64" fill="none"
+      xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Mood & Mind Centre"
+    >
+      <Discs cx={32} cy={32} r={14} />
     </svg>
   );
 }
 
-// Per-workplace branding: returns a logo element for an organisation, or null.
-// Keyed by workplace code (slug) so each org can carry its own identity.
-const ORG_LOGOS = {
-  mm: MoodMindLogo,
+// Full stacked lockup: emblem, serif wordmark, rule-flanked "CENTRE".
+function MoodMindLogo() {
+  return (
+    <svg
+      viewBox="0 0 320 132" fill="none" xmlns="http://www.w3.org/2000/svg"
+      role="img" aria-label="The Mood & Mind Centre"
+      style={{ width: "100%", height: "auto", display: "block" }}
+    >
+      <Discs cx={160} cy={30} r={16} />
+      <text x="160" y="90" textAnchor="middle" fontFamily={SERIF} fontSize="30" fill="#33413a">
+        The Mood <tspan fill="#5f8f72" fontStyle="italic">&amp; Mind</tspan>
+      </text>
+      <line x1="66" y1="108" x2="104" y2="108" stroke="#c3d6c9" strokeWidth="1.2" />
+      <line x1="212" y1="108" x2="250" y2="108" stroke="#c3d6c9" strokeWidth="1.2" />
+      <text x="160" y="113" textAnchor="middle" fontFamily={SERIF} fontSize="12.5" letterSpacing="6.5" fill="#5f8f72">
+        CENTRE
+      </text>
+    </svg>
+  );
+}
+
+// Compact horizontal lockup for tight spaces like the mobile app bar.
+function MoodMindCompact() {
+  return (
+    <svg
+      viewBox="0 0 250 44" fill="none" xmlns="http://www.w3.org/2000/svg"
+      role="img" aria-label="The Mood & Mind Centre"
+      style={{ width: "100%", height: "auto", display: "block" }}
+    >
+      <Discs cx={17} cy={22} r={11} />
+      <text x="41" y="23" fontFamily={SERIF} fontSize="19" fill="#33413a">
+        The Mood <tspan fill="#5f8f72" fontStyle="italic">&amp; Mind</tspan>
+      </text>
+      <text x="42" y="38" fontFamily={SERIF} fontSize="9.5" letterSpacing="4.4" fill="#5f8f72">
+        CENTRE
+      </text>
+    </svg>
+  );
+}
+
+/* ==========================================================================
+   Per-workplace branding, keyed by workplace code (slug).
+   ========================================================================== */
+
+const ORG_BRANDS = {
+  mm: { full: MoodMindLogo, compact: MoodMindCompact, mark: MoodMindMark, theme: "mm" },
 };
 
-export function OrgLogo({ slug }) {
-  const Logo = ORG_LOGOS[slug];
+export function OrgLogo({ slug, variant = "full" }) {
+  const Logo = ORG_BRANDS[slug]?.[variant];
   return Logo ? <Logo /> : null;
 }
 
+export function OrgMark({ slug, size = 32 }) {
+  const Mark = ORG_BRANDS[slug]?.mark;
+  return Mark ? <Mark size={size} /> : null;
+}
+
 export function hasOrgLogo(slug) {
-  return Boolean(ORG_LOGOS[slug]);
+  return Boolean(ORG_BRANDS[slug]);
+}
+
+// The palette key for a workplace, or null to keep RosterME's own colours.
+export function orgTheme(slug) {
+  return ORG_BRANDS[slug]?.theme ?? null;
 }
 
 export default LogoMark;

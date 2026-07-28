@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { fmtTime, fmtDate, todayIso, addDays } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
+import { SkeletonRows } from "../components/Skeleton.jsx";
 
 function OfferCard({ o, me, onAction }) {
   const s = o.shift;
@@ -139,19 +140,20 @@ export default function Offers({ me, notify }) {
   const done = (offers ?? []).filter((o) => ["approved", "rejected", "cancelled"].includes(o.status)).slice(0, 10);
 
   return (
-    <div className="plain-page">
+    <div className="plain-page has-fab">
       <header className="topbar">
         <h1>Offers</h1>
       </header>
 
-      {offers === null && <p className="empty">Loading…</p>}
+      {offers === null && <SkeletonRows count={3} />}
       {offers !== null && (
         <>
           <p className="section-title">Open offers</p>
           {open.length === 0 && (
             <p className="empty">
               <span className="big">🤝</span>
-              No open offers. Tap + to offer one of your shifts.
+              <strong>No shifts up for swap</strong>
+              When someone offers a shift it appears here. Tap + to offer one of yours.
             </p>
           )}
           <div className="cards-grid">

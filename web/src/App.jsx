@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, getSession, setSession } from "./api.js";
 import Login from "./pages/Login.jsx";
 import Calendar from "./pages/Calendar.jsx";
@@ -6,7 +7,8 @@ import Availability from "./pages/Availability.jsx";
 import Offers from "./pages/Offers.jsx";
 import Admin from "./pages/Admin.jsx";
 import Avatar from "./components/Avatar.jsx";
-import { LogoMark, OrgLogo, hasOrgLogo } from "./components/Logo.jsx";
+import { LogoMark, OrgLogo, hasOrgLogo, orgTheme } from "./components/Logo.jsx";
+import { InstallLink, useInstall, IOSInstallSheet } from "./components/InstallPrompt.jsx";
 
 const ICONS = {
   calendar: (active) => (
@@ -35,14 +37,31 @@ const ICONS = {
   ),
 };
 
+const KeyIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="8" cy="12" r="4" /><path d="M12 12h9m-3 0v3m-2-3v2" />
+  </svg>
+);
+const InstallIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="6" y="2" width="12" height="20" rx="3" /><path d="M12 6v7m0 0-2.5-2.5M12 13l2.5-2.5" />
+  </svg>
+);
+const OutIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v2" />
+    <path d="M20 12H10m10 0-3-3m3 3-3 3" />
+  </svg>
+);
+
 function ChangePinModal({ onClose, notify }) {
   const [pin, setPin] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
 
   const submit = () => {
-    if (!/^\d{4}$/.test(pin)) return notify("PIN must be exactly 4 digits.");
-    if (pin !== confirm) return notify("PINs don't match.");
+    if (!/^\d{4}$/.test(pin)) return notify("PIN must be exactly 4 digits.", "error");
+    if (pin !== confirm) return notify("PINs don't match.", "error");
     setBusy(true);
     api("/change-pin", { method: "POST", body: { pin } })
       .then(() => {
@@ -53,7 +72,7 @@ function ChangePinModal({ onClose, notify }) {
       .finally(() => setBusy(false));
   };
 
-  return (
+  return createPortal(
     <div className="modal-back" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="grab" />
@@ -75,7 +94,52 @@ function ChangePinModal({ onClose, notify }) {
           <button className="btn secondary" onClick={onClose}>Cancel</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** The account menu behind the avatar in the mobile app bar. */
+function AccountSheet({ session, onClose, onChangePin, onLogout }) {
+  const { available, canPrompt, install } = useInstall();
+  const [showIOS, setShowIOS] = useState(false);
+
+  return createPortal(
+    <>
+      <div className="modal-back" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="grab" />
+          <div className="acct-head">
+            <Avatar name={session.staff.name} size="lg" />
+            <div>
+              <div className="nm">{session.staff.name}</div>
+              <div className="rl">
+                {session.staff.isAdmin ? "Administrator" : "Staff"}
+                {session.org?.name ? ` · ${session.org.name}` : ""}
+              </div>
+            </div>
+          </div>
+          <div className="acct-sheet">
+            <button className="acct-item" onClick={() => { onClose(); onChangePin(); }}>
+              <KeyIcon /> Change my PIN
+            </button>
+            {available && (
+              <button
+                className="acct-item"
+                onClick={() => (canPrompt ? install().then(onClose) : setShowIOS(true))}
+              >
+                <InstallIcon /> Install on this phone
+              </button>
+            )}
+            <button className="acct-item danger" onClick={onLogout}>
+              <OutIcon /> Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+      {showIOS && <IOSInstallSheet onClose={() => { setShowIOS(false); onClose(); }} />}
+    </>,
+    document.body,
   );
 }
 
@@ -89,12 +153,22 @@ export default function App() {
   const [tab, setTab] = useState("calendar");
   const [toast, setToast] = useState(null);
   const [showPin, setShowPin] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), toast.type === "error" ? 4200 : 3000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Dress the whole app in the workplace's palette, so a signed-in clinic sees
+  // its own colours rather than the platform's.
+  const orgSlug = session?.org?.slug;
+  useEffect(() => {
+    const theme = orgTheme(orgSlug);
+    if (theme) document.documentElement.setAttribute("data-org", theme);
+    else document.documentElement.removeAttribute("data-org");
+  }, [orgSlug]);
 
   // notify(msg) or notify(msg, "error" | "success" | "info")
   const notify = (msg, type = "info") => setToast((prev) => ({ msg, type, id: (prev?.id ?? 0) + 1 }));
@@ -115,6 +189,7 @@ export default function App() {
     setSess(null);
   };
 
+  const branded = hasOrgLogo(session.org?.slug);
   const tabs = [
     { id: "calendar", label: "Calendar" },
     { id: "availability", label: "Availability" },
@@ -125,7 +200,7 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidenav">
-        {hasOrgLogo(session.org?.slug) ? (
+        {branded ? (
           <div className="side-brand branded">
             <div className="org-logo-tile"><OrgLogo slug={session.org.slug} /></div>
             <span className="brand-platform">Roster<b>ME</b></span>
@@ -147,6 +222,7 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <InstallLink className="side-install" />
         <div className="side-user">
           <Avatar name={session.staff.name} size="sm" />
           <div className="who">
@@ -158,18 +234,30 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Phones get no sidebar, so the workplace identity and account menu
+          live here instead. */}
+      <header className="appbar">
+        <div className="ab-logo">
+          {branded ? (
+            <span className="ab-org-logo"><OrgLogo slug={session.org.slug} variant="compact" /></span>
+          ) : (
+            <span className="ab-lockup">
+              <LogoMark size={30} idSuffix="-bar" />
+              <span className="nm">{session.org?.name ?? "RosterME"}</span>
+            </span>
+          )}
+        </div>
+        <button className="ab-me" onClick={() => setShowAccount(true)} aria-label="Account and settings">
+          <Avatar name={session.staff.name} size="sm" />
+        </button>
+      </header>
+
       <main className="main">
         {tab === "calendar" && <Calendar me={session.staff} notify={notify} />}
         {tab === "availability" && <Availability me={session.staff} notify={notify} />}
         {tab === "offers" && <Offers me={session.staff} notify={notify} />}
         {tab === "admin" && session.staff.isAdmin && (
           <Admin me={session.staff} notify={notify} onLogout={logout} />
-        )}
-        {tab !== "admin" && (
-          <div className="footer-note">
-            <button onClick={() => setShowPin(true)}>Change PIN</button>
-            <button onClick={logout}>Signed in as {session.staff.name} · Sign out</button>
-          </div>
         )}
       </main>
 
@@ -181,6 +269,15 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      {showAccount && (
+        <AccountSheet
+          session={session}
+          onClose={() => setShowAccount(false)}
+          onChangePin={() => setShowPin(true)}
+          onLogout={logout}
+        />
+      )}
       {showPin && <ChangePinModal onClose={() => setShowPin(false)} notify={notify} />}
       {toast && (
         <div className={`toast ${toast.type}`} key={toast.id} role="status">

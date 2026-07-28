@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
-import { LogoMark, OrgLogo, hasOrgLogo } from "../components/Logo.jsx";
+import { LogoMark, OrgLogo, hasOrgLogo, orgTheme } from "../components/Logo.jsx";
+import { InstallBanner } from "../components/InstallPrompt.jsx";
 
 function Banner({ error }) {
   if (!error) return <div className="login-status" />;
@@ -30,6 +31,14 @@ export default function Login({ onLogin }) {
       .catch(() => {})
       .finally(() => setChecking(false));
   }, []);
+
+  // the sign-in screen already wears the workplace's colours, before anyone
+  // has typed a PIN
+  useEffect(() => {
+    const theme = orgTheme(org?.slug);
+    if (theme) document.documentElement.setAttribute("data-org", theme);
+    else document.documentElement.removeAttribute("data-org");
+  }, [org]);
 
   // 2. once a workplace is known, load its staff
   useEffect(() => {
@@ -133,6 +142,7 @@ export default function Login({ onLogin }) {
           ))}
         </div>
         <Banner error={error} />
+        <InstallBanner />
       </div>
     );
   }

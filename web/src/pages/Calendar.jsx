@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api.js";
-import { iso, todayIso, parseIso, fmtDateLong, DAY_SHORT, dowOf, addDays, hoursBetween } from "../util.js";
+import { iso, todayIso, parseIso, fmtDate, fmtDateLong, DAY_SHORT, dowOf, addDays, hoursBetween } from "../util.js";
 import ShiftCard from "../components/ShiftCard.jsx";
+import { SkeletonRows } from "../components/Skeleton.jsx";
 
 function monthGrid(year, month) {
   // returns array of date-strings covering the month, padded to full Mon-Sun weeks
@@ -161,7 +162,7 @@ export default function Calendar({ me, notify }) {
         </div>
 
         <p className="day-title">{fmtDateLong(selected)}</p>
-        {loading && <p className="empty">Loading…</p>}
+        {loading && <SkeletonRows count={2} />}
         {!loading && away.length > 0 && (
           <div className="card" style={{ padding: "12px 14px" }}>
             <div className="row">
@@ -175,7 +176,10 @@ export default function Calendar({ me, notify }) {
         {!loading && dayShifts.length === 0 && (
           <p className="empty">
             <span className="big">🌤️</span>
-            No shifts {scope === "mine" ? "for you " : ""}on this day.
+            <strong>{scope === "mine" ? "You're not rostered" : "Nobody's rostered"}</strong>
+            {selected === today
+              ? "Nothing scheduled for today."
+              : `Nothing scheduled for ${fmtDate(selected)}.`}
           </p>
         )}
         {dayShifts.map((s) => {

@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { DAY_NAMES, fmtTime, fmtDate, fmtDateLong, todayIso, addDays, hoursBetween, weekEndingIso, dayMonth } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
+import { SkeletonRows, SkeletonLines } from "../components/Skeleton.jsx";
+import RosterTimeline from "../components/RosterTimeline.jsx";
 
 const blankShift = { id: null, staff_id: "", day_of_week: 0, start_time: "08:00", end_time: "13:00", location_id: "", role_id: "" };
 const hm = (t) => (t ? t.slice(0, 5) : "");
@@ -162,6 +164,8 @@ export default function Admin({ me, notify, onLogout }) {
   const [timeOff, setTimeOff] = useState(null); // all staff holiday requests
   const [reviewNote, setReviewNote] = useState({}); // per-request comment draft
   const [weekEnding, setWeekEnding] = useState(weekEndingIso()); // Sunday the roster is built to
+  const [rosterView, setRosterView] = useState("timeline"); // "timeline" | "cards"
+  const [copy, setCopy] = useState({ from: 0, to: 1 }); // copy-a-day source/target
   const weekStart = addDays(weekEnding, -6); // Monday of the selected week
 
   const loadOrgs = () => {
@@ -206,6 +210,40 @@ export default function Admin({ me, notify, onLogout }) {
       })
       .catch((e) => notify(e.message, "error"))
       .finally(() => setBusy(false));
+  };
+
+  // Copy a whole day's shifts onto another day — the fastest way to build a
+  // week where most days look alike. Uses the normal add endpoint per shift, so
+  // the same validation applies as if each were typed in by hand.
+  const copyDay = () => {
+    const from = Number(copy.from);
+    const to = Number(copy.to);
+    const rows = (template ?? []).filter((t) => t.day_of_week === from);
+    if (from === to) return notify("Pick two different days.", "error");
+    if (rows.length === 0) return notify(`${DAY_NAMES[from]} has no shifts to copy.`, "error");
+    const existing = (template ?? []).filter((t) => t.day_of_week === to).length;
+    if (
+      !confirm(
+        `Copy ${rows.length} ${rows.length === 1 ? "shift" : "shifts"} from ${DAY_NAMES[from]} to ${DAY_NAMES[to]}?` +
+          (existing ? `\n\n${DAY_NAMES[to]} already has ${existing}. These are added on top — nothing is removed.` : ""),
+      )
+    ) return;
+    setBusy(true);
+    Promise.all(
+      rows.map((t) =>
+        api("/admin/template", {
+          method: "POST",
+          body: {
+            staff_id: t.staff_id, day_of_week: to,
+            start_time: hm(t.start_time), end_time: hm(t.end_time),
+            location_id: t.location_id, role_id: t.role_id,
+          },
+        }),
+      ),
+    )
+      .then(() => notify(`${DAY_NAMES[from]} copied to ${DAY_NAMES[to]}.`, "success"))
+      .catch((e) => notify(e.message, "error"))
+      .finally(() => { setBusy(false); load(); });
   };
 
   const openNew = (dow = 0) => setEditing({ ...blankShift, day_of_week: dow });
@@ -272,6 +310,20 @@ export default function Admin({ me, notify, onLogout }) {
     (acc, t) => acc + hoursBetween(hm(t.start_time), hm(t.end_time)), 0,
   );
   const activeStaff = meta?.staff.filter((s) => s.active) ?? [];
+  const pendingTimeOff = (timeOff ?? []).filter((u) => u.status === "pending").length;
+
+  // Admin is one long page by nature — six sections deep. These chips keep every
+  // one of them a tap away instead of a scroll hunt.
+  const sections = [
+    { id: "sec-build", label: "Build" },
+    { id: "sec-roster", label: "Roster" },
+    { id: "sec-hours", label: "Hours" },
+    { id: "sec-timeoff", label: "Time off", n: pendingTimeOff || null },
+    { id: "sec-staff", label: "Staff" },
+    ...(me.isPlatformAdmin ? [{ id: "sec-orgs", label: "Workplaces" }] : []),
+  ];
+  const jump = (id) =>
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // per-person rostered vs contract, for the balance panel
   const balance = activeStaff.map((s) => {
@@ -309,7 +361,16 @@ export default function Admin({ me, notify, onLogout }) {
         </div>
       </div>
 
-      <p className="section-title">Build roster</p>
+      <nav className="sec-nav" aria-label="Admin sections">
+        {sections.map((s) => (
+          <button key={s.id} onClick={() => jump(s.id)}>
+            {s.label}
+            {s.n ? <span className="n">{s.n}</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      <p className="section-title sec-anchor" id="sec-build">Build roster</p>
       <div className="card roster-setup">
         <div className="setup-main">
           <div className="setup-field">
@@ -329,20 +390,63 @@ export default function Admin({ me, notify, onLogout }) {
         </div>
       </div>
 
-      <div className="roster-toolbar">
+      <div className="card copy-day">
+        <p className="mini-label">Copy a day</p>
+        <div className="copy-row">
+          <select value={copy.from} onChange={(e) => setCopy({ ...copy, from: e.target.value })} aria-label="Copy from day">
+            {DAY_NAMES.map((d, i) => (
+              <option key={i} value={i}>
+                {d} ({(template ?? []).filter((t) => t.day_of_week === i).length})
+              </option>
+            ))}
+          </select>
+          <span className="arrow" aria-hidden="true">→</span>
+          <select value={copy.to} onChange={(e) => setCopy({ ...copy, to: e.target.value })} aria-label="Copy to day">
+            {DAY_NAMES.map((d, i) => (
+              <option key={i} value={i}>
+                {d} ({(template ?? []).filter((t) => t.day_of_week === i).length})
+              </option>
+            ))}
+          </select>
+          <button className="btn small" onClick={copyDay} disabled={busy || template === null}>Copy</button>
+        </div>
+        <p className="hint" style={{ margin: "9px 0 0" }}>
+          Duplicates every shift from one day onto another. Existing shifts on the target day are kept.
+        </p>
+      </div>
+
+      <div className="roster-toolbar sec-anchor" id="sec-roster">
         <p className="section-title" style={{ margin: 0 }}>Weekly roster</p>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn small secondary" onClick={() => window.print()}>Print</button>
           <button className="btn small" onClick={() => openNew(0)}>+ New shift</button>
         </div>
       </div>
+      <div className="seg" style={{ marginBottom: 12 }}>
+        <button className={rosterView === "timeline" ? "active" : ""} onClick={() => setRosterView("timeline")}>
+          Timeline
+        </button>
+        <button className={rosterView === "cards" ? "active" : ""} onClick={() => setRosterView("cards")}>
+          By day
+        </button>
+      </div>
       <p className="hint">
-        Tap any shift to edit its person, time, location or role. The editor flags double-bookings and
-        availability clashes as you go.
+        {rosterView === "timeline"
+          ? "Every shift on one hour axis — tap a bar to edit it. The strip under the clock shows how many people are on, and turns red where nobody is."
+          : "Tap any shift to edit its person, time, location or role. The editor flags double-bookings and availability clashes as you go."}
       </p>
 
-      {template === null && <p className="empty">Loading…</p>}
-      {template !== null && (
+      {template === null && <SkeletonRows count={3} />}
+      {template !== null && rosterView === "timeline" && (
+        <RosterTimeline
+          template={template}
+          weekStart={weekStart}
+          availability={availability}
+          onEdit={openEdit}
+          onAdd={openNew}
+        />
+      )}
+      {template !== null && rosterView === "cards" && (
         <div className="cards-grid">
           {DAY_NAMES.map((day, dow) => {
             const rows = template.filter((t) => t.day_of_week === dow);
@@ -386,9 +490,15 @@ export default function Admin({ me, notify, onLogout }) {
         </div>
       )}
 
-      <p className="section-title">Weekly hours balance</p>
+      <p className="section-title sec-anchor" id="sec-hours">Weekly hours balance</p>
       <div className="card">
-        {balance.length === 0 && <p className="empty" style={{ padding: 8 }}>—</p>}
+        {meta === null && <SkeletonLines count={3} />}
+        {meta !== null && balance.length === 0 && (
+          <p className="empty" style={{ padding: "14px 8px" }}>
+            <strong>No active staff yet</strong>
+            Add someone below and their hours will track here.
+          </p>
+        )}
         {balance.map(({ s, rostered, contract, status, pct }) => (
           <div className="balance-row" key={s.id}>
             <Avatar name={s.name} size="sm" />
@@ -412,14 +522,18 @@ export default function Admin({ me, notify, onLogout }) {
         const decided = list.filter((u) => u.status !== "pending");
         return (
           <>
-            <p className="section-title">
+            <p className="section-title sec-anchor" id="sec-timeoff">
               Time off &amp; holidays
               {pending.length > 0 && <span className="pending-count">{pending.length} to review</span>}
             </p>
             <div className="card">
-              {timeOff === null && <p className="empty" style={{ padding: 8 }}>Loading…</p>}
+              {timeOff === null && <SkeletonLines count={2} />}
               {timeOff !== null && list.length === 0 && (
-                <p className="empty" style={{ padding: 12 }}><span className="big">🏖️</span>No time off requested.</p>
+                <p className="empty" style={{ padding: "14px 12px" }}>
+                  <span className="big">🏖️</span>
+                  <strong>Nothing to review</strong>
+                  Holiday requests from your team will land here.
+                </p>
               )}
               {pending.map((u) => (
                 <div className="timeoff-row pending" key={u.id}>
@@ -467,8 +581,9 @@ export default function Admin({ me, notify, onLogout }) {
         );
       })()}
 
-      <p className="section-title">Staff</p>
+      <p className="section-title sec-anchor" id="sec-staff">Staff</p>
       <div className="card">
+        {meta === null && <SkeletonLines count={3} />}
         {meta?.staff.map((s) => (
           <div className="list-row" key={s.id}>
             <Avatar name={s.name} size="sm" />
@@ -488,34 +603,44 @@ export default function Admin({ me, notify, onLogout }) {
             )}
           </div>
         ))}
-        <div className="row" style={{ marginTop: 12 }}>
-          <input
-            type="text" placeholder="New staff name"
-            value={staffForm.name}
-            onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
-            style={{ flex: 1, minWidth: 130 }}
-          />
-          <input
-            type="text" placeholder="PIN" size={5}
-            value={staffForm.pin}
-            onChange={(e) => setStaffForm({ ...staffForm, pin: e.target.value })}
-            style={{ width: 76 }}
-          />
-          <input
-            type="number" placeholder="Hours"
-            value={staffForm.contract_hours}
-            onChange={(e) => setStaffForm({ ...staffForm, contract_hours: e.target.value })}
-            style={{ width: 76 }}
-          />
-          <button className="btn" onClick={addStaff}>Add</button>
+        <div className="form-grid">
+          <div className="full">
+            <label htmlFor="st-name">Add a staff member</label>
+            <input
+              id="st-name" type="text" placeholder="Full name"
+              value={staffForm.name}
+              onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
+            />
+          </div>
+          <div>
+            <label htmlFor="st-pin">Starting PIN</label>
+            <input
+              id="st-pin" type="text" inputMode="numeric" maxLength={4} placeholder="4 digits"
+              value={staffForm.pin}
+              onChange={(e) => setStaffForm({ ...staffForm, pin: e.target.value.replace(/\D/g, "") })}
+            />
+          </div>
+          <div>
+            <label htmlFor="st-hours">Contract hours</label>
+            <input
+              id="st-hours" type="number" placeholder="0"
+              value={staffForm.contract_hours}
+              onChange={(e) => setStaffForm({ ...staffForm, contract_hours: e.target.value })}
+            />
+          </div>
+          <div className="full">
+            <button className="btn" onClick={addStaff}>Add staff member</button>
+          </div>
         </div>
       </div>
 
       {me.isPlatformAdmin && (
         <>
-          <p className="section-title">Organisations <span className="plat-tag">RosterME platform</span></p>
+          <p className="section-title sec-anchor" id="sec-orgs">
+            Organisations <span className="plat-tag">RosterME platform</span>
+          </p>
           <div className="card">
-            {orgs === null && <p className="empty" style={{ padding: 8 }}>Loading…</p>}
+            {orgs === null && <SkeletonLines count={2} />}
             {orgs?.map((o) => (
               <div className="list-row" key={o.id}>
                 <span className="org-badge sm">{(o.short_name || o.name).slice(0, 3)}</span>
@@ -530,24 +655,37 @@ export default function Admin({ me, notify, onLogout }) {
             ))}
             <div className="org-add">
               <p className="mini-label">Add a workplace</p>
-              <div className="row">
-                <input type="text" placeholder="Workplace name" value={orgForm.name}
-                  onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} style={{ flex: 2, minWidth: 160 }} />
-                <input type="text" placeholder="Badge (e.g. M&M)" value={orgForm.short_name}
-                  onChange={(e) => setOrgForm({ ...orgForm, short_name: e.target.value })} style={{ flex: 1, minWidth: 110 }} />
+              <div className="form-grid" style={{ marginTop: 0 }}>
+                <div className="full">
+                  <label htmlFor="og-name">Workplace name</label>
+                  <input id="og-name" type="text" placeholder="e.g. Northside Clinic" value={orgForm.name}
+                    onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} />
+                </div>
+                <div>
+                  <label htmlFor="og-badge">Badge</label>
+                  <input id="og-badge" type="text" placeholder="e.g. M&amp;M" value={orgForm.short_name}
+                    onChange={(e) => setOrgForm({ ...orgForm, short_name: e.target.value })} />
+                </div>
+                <div>
+                  <label htmlFor="og-domain">Custom domain</label>
+                  <input id="og-domain" type="text" placeholder="optional" value={orgForm.domain}
+                    onChange={(e) => setOrgForm({ ...orgForm, domain: e.target.value })} />
+                </div>
+                <div>
+                  <label htmlFor="og-admin">First admin</label>
+                  <input id="og-admin" type="text" placeholder="Full name" value={orgForm.adminName}
+                    onChange={(e) => setOrgForm({ ...orgForm, adminName: e.target.value })} />
+                </div>
+                <div>
+                  <label htmlFor="og-pin">Admin PIN</label>
+                  <input id="og-pin" type="text" inputMode="numeric" maxLength={4} placeholder="4 digits" value={orgForm.adminPin}
+                    onChange={(e) => setOrgForm({ ...orgForm, adminPin: e.target.value.replace(/\D/g, "") })} />
+                </div>
+                <div className="full">
+                  <button className="btn" onClick={addOrg} disabled={busy}>Create workplace</button>
+                </div>
               </div>
-              <div className="row" style={{ marginTop: 8 }}>
-                <input type="text" placeholder="Custom domain (optional)" value={orgForm.domain}
-                  onChange={(e) => setOrgForm({ ...orgForm, domain: e.target.value })} style={{ flex: 1, minWidth: 200 }} />
-              </div>
-              <div className="row" style={{ marginTop: 8 }}>
-                <input type="text" placeholder="First admin name" value={orgForm.adminName}
-                  onChange={(e) => setOrgForm({ ...orgForm, adminName: e.target.value })} style={{ flex: 2, minWidth: 150 }} />
-                <input type="text" inputMode="numeric" maxLength={4} placeholder="Admin PIN" value={orgForm.adminPin}
-                  onChange={(e) => setOrgForm({ ...orgForm, adminPin: e.target.value.replace(/\D/g, "") })} style={{ width: 96 }} />
-                <button className="btn" onClick={addOrg} disabled={busy}>Create</button>
-              </div>
-              <p className="hint" style={{ margin: "8px 0 0" }}>
+              <p className="hint" style={{ margin: "12px 0 0" }}>
                 New workplaces start with one location and role and their own admin — everything is kept separate from other organisations.
               </p>
             </div>

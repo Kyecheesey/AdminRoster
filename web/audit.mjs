@@ -248,8 +248,8 @@ check("availability saved (Sat on)", state.availability.find((a) => a.day_of_wee
 // 8. time off add + remove
 await page.locator('input[type="date"]').first().fill(tmrIso);
 await page.locator('input[type="date"]').nth(1).fill(tmrIso);
-await page.getByPlaceholder("Reason (optional)").fill("dentist");
-await page.getByRole("button", { name: "Add", exact: true }).click();
+await page.getByLabel("Reason (optional)").fill("dentist");
+await page.getByRole("button", { name: "Add time off" }).click();
 await page.waitForTimeout(500);
 check("time off added", state.unavailability.filter((u) => u.staff_id === "s3").length === 1);
 await page.getByRole("button", { name: "Remove" }).first().click();
@@ -273,6 +273,10 @@ await page.waitForTimeout(500);
 check("template shift added", state.template.length === 2 && state.template[1].staff_id === "s6");
 
 // 9b. admin: edit an existing shift's time via the editor (PUT)
+check("roster timeline is the default view", await page.locator(".tl-wrap").isVisible());
+check("timeline draws a bar per shift", (await page.locator(".tl-bar").count()) > 0);
+await page.getByRole("button", { name: "By day" }).click();
+await page.waitForTimeout(300);
 await page.locator(".shift-chip").first().click();
 await page.waitForTimeout(300);
 check("editor opens on edit", await page.getByRole("heading", { name: "Edit shift" }).isVisible());
@@ -280,6 +284,20 @@ await modal.locator('input[type="time"]').nth(1).fill("15:30");
 await modal.getByRole("button", { name: "Save changes" }).click();
 await page.waitForTimeout(500);
 check("template shift edited (PUT)", state.template.find((t) => t.id === "t1").end_time === "15:30:00");
+
+// 9b-ii. copy every shift from one day onto another
+const srcDow = state.template[0].day_of_week;
+const dstDow = (srcDow + 3) % 7;
+const srcCount = state.template.filter((t) => t.day_of_week === srcDow).length;
+const dstBefore = state.template.filter((t) => t.day_of_week === dstDow).length;
+await page.locator(".copy-row select").nth(0).selectOption(String(srcDow));
+await page.locator(".copy-row select").nth(1).selectOption(String(dstDow));
+await page.getByRole("button", { name: "Copy", exact: true }).click();
+await page.waitForTimeout(700);
+check(
+  "copy day duplicates a day's shifts onto another day",
+  state.template.filter((t) => t.day_of_week === dstDow).length === dstBefore + srcCount,
+);
 
 // 9c. editor flags an availability clash (Cass available 08:00–19:00 Mon)
 await page.getByRole("button", { name: "+ New shift" }).click();
@@ -299,11 +317,11 @@ check("balance panel flags under-contract", await page.locator(".bal-chip.under"
 // 9e. platform admin: organisations panel + create a new workplace
 check("organisations panel visible to platform admin", await page.getByText("Add a workplace").isVisible());
 check("existing org listed in platform panel", await page.locator(".org-add").first().isVisible() && (await page.locator(".list-row strong", { hasText: "The Mood & Mind Centre" }).count()) > 0);
-await page.getByPlaceholder("Workplace name").fill("Sunshine Clinic");
-await page.getByPlaceholder("Badge (e.g. M&M)").fill("SUN");
-await page.getByPlaceholder("First admin name").fill("Pat Lee");
-await page.getByPlaceholder("Admin PIN").fill("2468");
-await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.getByLabel("Workplace name").fill("Sunshine Clinic");
+await page.getByLabel("Badge").fill("SUN");
+await page.getByLabel("First admin").fill("Pat Lee");
+await page.getByLabel("Admin PIN").fill("2468");
+await page.getByRole("button", { name: "Create workplace" }).click();
 await page.waitForTimeout(500);
 check("new organisation created", state.orgs.length === 2 && state.orgs[1].name === "Sunshine Clinic");
 check("new organisation shown in list", await page.getByText("Sunshine Clinic").first().isVisible());
@@ -327,10 +345,13 @@ await page.getByRole("button", { name: "Start fresh" }).click();
 await page.waitForTimeout(500);
 check("start fresh clears the roster", state.template.length === 0);
 
-// 10. change own PIN from footer
+// 10. change own PIN from the account sheet behind the app-bar avatar
 await page.getByRole("button", { name: "Calendar" }).click();
 await page.waitForTimeout(400);
-await page.getByRole("button", { name: "Change PIN", exact: true }).click();
+await page.getByRole("button", { name: "Account and settings" }).click();
+await page.waitForTimeout(300);
+check("account sheet opens from the app bar", await page.getByRole("heading", { name: "Change my PIN" }).isVisible() === false);
+await page.getByRole("button", { name: "Change my PIN" }).click();
 await page.waitForTimeout(300);
 await page.getByPlaceholder("New 4-digit PIN").fill("5678");
 await page.getByPlaceholder("Repeat PIN").fill("5678");
@@ -347,6 +368,8 @@ await page.waitForTimeout(600);
 check("away shift flagged as needing cover", await page.getByText("Away — needs cover").first().isVisible());
 
 // 12. sign out returns to login
+await page.getByRole("button", { name: "Account and settings" }).click();
+await page.waitForTimeout(300);
 await page.getByRole("button", { name: "Sign out" }).click();
 await page.waitForTimeout(400);
 check("sign out returns to workplace entry", await page.getByText("Sign in to your workplace").isVisible());

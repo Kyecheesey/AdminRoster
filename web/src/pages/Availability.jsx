@@ -135,9 +135,10 @@ export default function Availability({ me, notify }) {
       <div className="card">
         <h3>Time off / away</h3>
         {timeOff.length === 0 && (
-          <p className="empty" style={{ padding: "10px 0" }}>
+          <p className="empty" style={{ padding: "10px 0 4px" }}>
             <span className="big">🏖️</span>
-            No upcoming time off.
+            <strong>No time off booked</strong>
+            Add dates below and {me.isAdmin ? "they'll go straight on the roster." : "your manager will review them."}
           </p>
         )}
         {timeOff.map((u) => (
@@ -154,21 +155,34 @@ export default function Availability({ me, notify }) {
             <button className="btn small secondary" onClick={() => removeTimeOff(u.id)}>Remove</button>
           </div>
         ))}
-        <div className="row" style={{ marginTop: 12 }}>
-          <label className="small">From</label>
-          <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
-          <label className="small">To</label>
-          <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
-        </div>
-        <div className="row">
-          <input
-            type="text"
-            placeholder="Reason (optional)"
-            value={form.note}
-            onChange={(e) => setForm({ ...form, note: e.target.value })}
-            style={{ flex: 1 }}
-          />
-          <button className="btn" onClick={addTimeOff}>Add</button>
+        <div className="timeoff-form">
+          <div>
+            <label htmlFor="to-from">First day</label>
+            <input
+              id="to-from" type="date" value={form.start_date}
+              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+            />
+          </div>
+          <div>
+            <label htmlFor="to-to">Last day</label>
+            <input
+              id="to-to" type="date" value={form.end_date}
+              onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+            />
+          </div>
+          <div className="full">
+            <label htmlFor="to-note">Reason (optional)</label>
+            <input
+              id="to-note" type="text" placeholder="e.g. family holiday"
+              value={form.note}
+              onChange={(e) => setForm({ ...form, note: e.target.value })}
+            />
+          </div>
+          <div className="full">
+            <button className="btn" onClick={addTimeOff}>
+              {me.isAdmin ? "Add time off" : "Request time off"}
+            </button>
+          </div>
         </div>
       </div>
       </div>

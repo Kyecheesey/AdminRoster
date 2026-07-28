@@ -54,9 +54,12 @@ export function fmtDateLong(s) {
   return d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
+// Muted, evenly-spaced hues that sit calmly beside the brand instead of
+// shouting over it. Every one of these clears 4.5:1 against the white initials
+// — the old brighter set (amber, hot pink) did not.
 const AVATAR_COLORS = [
-  "#0e9884", "#2f7fdb", "#e6739f", "#f59e0b",
-  "#12a150", "#e8795a", "#0ea5b7", "#c98a2e",
+  "#0d7c6a", "#35708f", "#96577a", "#9c6b2e",
+  "#47795a", "#a5573f", "#5c62a0", "#62753c",
 ];
 
 export function initials(name) {
@@ -81,6 +84,32 @@ export function timeParts(t) {
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return [`${h12}:${String(m).padStart(2, "0")}`, ampm];
+}
+
+// "HH:MM" (or "HH:MM:SS") -> minutes since midnight
+export function toMinutes(t) {
+  if (!t) return 0;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Colour-code shifts by role, the way a wall roster does — one glance tells you
+// which part of the business is covered. Stable per role name.
+const ROLE_COLORS = [
+  { bar: "#1d9c7f", ink: "#ffffff", soft: "#e3f4ef" },
+  { bar: "#4a7fb5", ink: "#ffffff", soft: "#e8f0f8" },
+  { bar: "#b5678c", ink: "#ffffff", soft: "#f8eaf1" },
+  { bar: "#c08a35", ink: "#ffffff", soft: "#fbf0dd" },
+  { bar: "#5f8f5f", ink: "#ffffff", soft: "#ecf3ec" },
+  { bar: "#a86249", ink: "#ffffff", soft: "#f8ece7" },
+  { bar: "#6b6fa8", ink: "#ffffff", soft: "#eeeef8" },
+  { bar: "#7d8a3f", ink: "#ffffff", soft: "#f1f3e4" },
+];
+
+export function roleColor(name = "") {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return ROLE_COLORS[h % ROLE_COLORS.length];
 }
 
 export function hoursBetween(start, end) {
