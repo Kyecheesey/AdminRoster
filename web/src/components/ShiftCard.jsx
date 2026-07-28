@@ -1,11 +1,11 @@
 import React from "react";
 import Avatar from "./Avatar.jsx";
-import { timeParts } from "../util.js";
+import { PinIcon, PlaneIcon } from "./Icons.jsx";
+import { timeParts, roleChipStyle } from "../util.js";
 
 export default function ShiftCard({ shift, isMine, action, subtitle, away }) {
   const [st, stAmpm] = timeParts(shift.start_time);
   const [et, etAmpm] = timeParts(shift.end_time);
-  const roleClass = shift.role.name.toLowerCase().includes("mood") ? "role-mood" : "role-centre";
   return (
     <div className="shift-card">
       <div className={"time-rail" + (shift.status === "swapped" ? " swapped" : "")}>
@@ -24,10 +24,10 @@ export default function ShiftCard({ shift, isMine, action, subtitle, away }) {
           </div>
         </div>
         <div className="shift-chips">
-          <span className="chip loc">📍 {shift.location.name}</span>
-          <span className={`chip ${roleClass}`}>{shift.role.name}</span>
+          <span className="chip loc"><PinIcon size={13} /> {shift.location.name}</span>
+          <span className="chip role" style={roleChipStyle(shift.role.name)}>{shift.role.name}</span>
           {shift.status === "swapped" && <span className="chip swapped">Swapped in</span>}
-          {away && <span className="chip away">✈️ Away — needs cover</span>}
+          {away && <span className="chip away"><PlaneIcon size={13} /> Away — needs cover</span>}
         </div>
       </div>
       <div className="shift-side">

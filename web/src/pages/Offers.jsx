@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api.js";
-import { fmtTime, fmtDate, todayIso, addDays } from "../util.js";
+import { fmtTime, fmtDate, todayIso, addDays, roleChipStyle } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
 import { SkeletonRows } from "../components/Skeleton.jsx";
+import { PinIcon, SwapIcon, ArrowRight, PlusIcon } from "../components/Icons.jsx";
 
 function OfferCard({ o, me, onAction }) {
   const s = o.shift;
   const isMine = o.offered_by === me.id;
-  const roleClass = s.role.name.toLowerCase().includes("mood") ? "role-mood" : "role-centre";
   const badge = {
     open: <span className="badge open">Open</span>,
     pending_approval: <span className="badge pending">Awaiting approval</span>,
@@ -26,8 +26,8 @@ function OfferCard({ o, me, onAction }) {
             {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
           </div>
           <div className="shift-chips" style={{ marginTop: 6 }}>
-            <span className="chip loc">📍 {s.location.name}</span>
-            <span className={`chip ${roleClass}`}>{s.role.name}</span>
+            <span className="chip loc"><PinIcon size={13} /> {s.location.name}</span>
+            <span className="chip role" style={roleChipStyle(s.role.name)}>{s.role.name}</span>
           </div>
         </div>
         {badge}
@@ -36,7 +36,7 @@ function OfferCard({ o, me, onAction }) {
       <div className="offer-people">
         <Avatar name={o.offerer.name} size="sm" />
         <span className="pname">{isMine ? "You" : o.offerer.name}</span>
-        <span className="arrow">→</span>
+        <span className="arrow"><ArrowRight size={15} /></span>
         {o.acceptor ? (
           <>
             <Avatar name={o.acceptor.name} size="sm" />
@@ -151,7 +151,7 @@ export default function Offers({ me, notify }) {
           <p className="section-title">Open offers</p>
           {open.length === 0 && (
             <p className="empty">
-              <span className="big">🤝</span>
+              <span className="big"><SwapIcon size={26} /></span>
               <strong>No shifts up for swap</strong>
               When someone offers a shift it appears here. Tap + to offer one of yours.
             </p>
@@ -180,7 +180,7 @@ export default function Offers({ me, notify }) {
         </>
       )}
 
-      <button className="fab" onClick={openPicker} aria-label="Offer a shift">+</button>
+      <button className="fab" onClick={openPicker} aria-label="Offer a shift"><PlusIcon size={24} /></button>
 
       {showPick && createPortal(
         <div className="modal-back" onClick={() => setShowPick(false)}>
@@ -198,7 +198,7 @@ export default function Offers({ me, notify }) {
               >
                 <strong>{fmtDate(s.shift_date)}</strong> · {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
                 <br />
-                <span className="sub">📍 {s.location.name} · {s.role.name}</span>
+                <span className="sub"><PinIcon size={12} /> {s.location.name} · {s.role.name}</span>
               </button>
             ))}
             {myShifts.length > 0 && (

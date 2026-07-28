@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { DAY_NAMES, DAY_SHORT, fmtTime, hoursBetween, addDays, dayMonth, toMinutes, roleColor } from "../util.js";
+import { PinIcon, CalendarIcon, WarnIcon, PlusIcon } from "./Icons.jsx";
 
 const hm = (t) => (t ? t.slice(0, 5) : "");
 const PX_PER_HOUR = 62; // wide enough to read a 30-minute bar
@@ -96,12 +97,12 @@ export default function RosterTimeline({ template, weekStart, availability, onEd
       <div className="tl-summary">
         <strong>{DAY_NAMES[dow]}</strong>
         <span>{rows.length} {rows.length === 1 ? "shift" : "shifts"} · {dayHours}h · peak {peak} on</span>
-        <button className="btn small" onClick={() => onAdd(dow)}>+ Add shift</button>
+        <button className="btn small" onClick={() => onAdd(dow)}><PlusIcon size={14} /> Add shift</button>
       </div>
 
       {rows.length === 0 ? (
         <p className="empty">
-          <span className="big">🗓️</span>
+          <span className="big"><CalendarIcon size={26} /></span>
           <strong>Nothing rostered on {DAY_NAMES[dow]}</strong>
           Add a shift and it'll appear on the timeline.
         </p>
@@ -149,7 +150,7 @@ export default function RosterTimeline({ template, weekStart, availability, onEd
             {groups.map(([loc, items]) => (
               <React.Fragment key={loc}>
                 <div className="tl-group">
-                  <span className="pin">📍</span>{loc}
+                  <span className="pin"><PinIcon size={12} /></span>{loc}
                   <span className="gn">{items.length}</span>
                 </div>
                 {items.map((t) => {
@@ -177,7 +178,7 @@ export default function RosterTimeline({ template, weekStart, availability, onEd
                         >
                           <span className="bt">{t.role?.name}</span>
                           <span className="bh">{hoursBetween(hm(t.start_time), hm(t.end_time))}h</span>
-                          {warn && <span className="bw">⚠</span>}
+                          {warn && <span className="bw"><WarnIcon size={12} /></span>}
                         </button>
                       </div>
                     </div>

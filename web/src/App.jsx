@@ -9,6 +9,7 @@ import Admin from "./pages/Admin.jsx";
 import Avatar from "./components/Avatar.jsx";
 import { LogoMark, OrgLogo, hasOrgLogo, orgTheme } from "./components/Logo.jsx";
 import { InstallLink, useInstall, IOSInstallSheet } from "./components/InstallPrompt.jsx";
+import { AlertIcon, CheckIcon, InfoIcon } from "./components/Icons.jsx";
 
 const ICONS = {
   calendar: (active) => (
@@ -281,8 +282,10 @@ export default function App() {
       {showPin && <ChangePinModal onClose={() => setShowPin(false)} notify={notify} />}
       {toast && (
         <div className={`toast ${toast.type}`} key={toast.id} role="status">
-          <span className="toast-ic" aria-hidden="true">
-            {toast.type === "error" ? "!" : toast.type === "success" ? "✓" : "i"}
+          <span className="toast-ic">
+            {toast.type === "error" ? <AlertIcon size={14} />
+              : toast.type === "success" ? <CheckIcon size={14} />
+              : <InfoIcon size={14} />}
           </span>
           <span className="toast-msg">{toast.msg}</span>
         </div>

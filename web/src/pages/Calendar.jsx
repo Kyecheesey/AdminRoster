@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { iso, todayIso, parseIso, fmtDate, fmtDateLong, DAY_SHORT, dowOf, addDays, hoursBetween } from "../util.js";
 import ShiftCard from "../components/ShiftCard.jsx";
+import { ChevronLeft, ChevronRight, PlaneIcon, SunIcon } from "../components/Icons.jsx";
 import { SkeletonRows } from "../components/Skeleton.jsx";
 
 function monthGrid(year, month) {
@@ -106,9 +107,9 @@ export default function Calendar({ me, notify }) {
           </button>
         </header>
         <div className="cal-head">
-          <button className="nav-btn" onClick={() => nav(-1)} aria-label="Previous month">‹</button>
+          <button className="nav-btn" onClick={() => nav(-1)} aria-label="Previous month"><ChevronLeft size={18} /></button>
           <span className="month">{monthName}</span>
-          <button className="nav-btn" onClick={() => nav(1)} aria-label="Next month">›</button>
+          <button className="nav-btn" onClick={() => nav(1)} aria-label="Next month"><ChevronRight size={18} /></button>
         </div>
         <div className="cal-grid">
           {DAY_SHORT.map((d) => (
@@ -166,7 +167,7 @@ export default function Calendar({ me, notify }) {
         {!loading && away.length > 0 && (
           <div className="card" style={{ padding: "12px 14px" }}>
             <div className="row">
-              <span className="chip away">✈️ Away</span>
+              <span className="chip away"><PlaneIcon size={13} /> Away</span>
               <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--muted)" }}>
                 {away.map((u) => u.staff.name + (u.note ? ` (${u.note})` : "")).join(", ")}
               </span>
@@ -175,7 +176,7 @@ export default function Calendar({ me, notify }) {
         )}
         {!loading && dayShifts.length === 0 && (
           <p className="empty">
-            <span className="big">🌤️</span>
+            <span className="big"><SunIcon size={26} /></span>
             <strong>{scope === "mine" ? "You're not rostered" : "Nobody's rostered"}</strong>
             {selected === today
               ? "Nothing scheduled for today."

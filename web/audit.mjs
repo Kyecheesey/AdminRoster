@@ -259,7 +259,7 @@ check("time off removed", state.unavailability.filter((u) => u.staff_id === "s3"
 // 9. admin: add a shift via the editor modal
 await page.getByRole("button", { name: "Admin" }).click();
 await page.waitForTimeout(500);
-await page.getByRole("button", { name: "+ New shift" }).click();
+await page.getByRole("button", { name: "New shift" }).click();
 await page.waitForTimeout(300);
 const modal = page.locator(".modal");
 check("editor opens on add", await page.getByRole("heading", { name: "Add shift" }).isVisible());
@@ -300,7 +300,7 @@ check(
 );
 
 // 9c. editor flags an availability clash (Cass available 08:00–19:00 Mon)
-await page.getByRole("button", { name: "+ New shift" }).click();
+await page.getByRole("button", { name: "New shift" }).click();
 await page.waitForTimeout(300);
 await modal.locator("select").nth(0).selectOption({ label: "Cass Reid" });
 await modal.locator("select").nth(1).selectOption({ label: "Monday" });

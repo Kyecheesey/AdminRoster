@@ -5,6 +5,7 @@ import { DAY_NAMES, fmtTime, fmtDate, fmtDateLong, todayIso, addDays, hoursBetwe
 import Avatar from "../components/Avatar.jsx";
 import { SkeletonRows, SkeletonLines } from "../components/Skeleton.jsx";
 import RosterTimeline from "../components/RosterTimeline.jsx";
+import { PinIcon, PalmIcon, WarnIcon, EditIcon, PrintIcon, PlusIcon, ArrowRight } from "../components/Icons.jsx";
 
 const blankShift = { id: null, staff_id: "", day_of_week: 0, start_time: "08:00", end_time: "13:00", location_id: "", role_id: "" };
 const hm = (t) => (t ? t.slice(0, 5) : "");
@@ -102,7 +103,7 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
           <label>Time</label>
           <div className="time-field">
             <input type="time" value={f.start_time} onChange={(e) => set({ start_time: e.target.value })} />
-            <span className="dash">→</span>
+            <span className="dash"><ArrowRight size={15} /></span>
             <input type="time" value={f.end_time} onChange={(e) => set({ end_time: e.target.value })} />
             <span className="hours-pill">{dur > 0 ? `${dur}h` : "—"}</span>
           </div>
@@ -127,7 +128,7 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
 
         {warnings.length > 0 && (
           <div className="editor-warn" role="alert">
-            <strong>⚠ Heads up</strong>
+            <strong><WarnIcon size={14} /> Heads up</strong>
             <ul>{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
             <span className="tiny">You can still save — this is just a flag.</span>
           </div>
@@ -343,7 +344,7 @@ export default function Admin({ me, notify, onLogout }) {
     <div className="plain-page">
       <header className="topbar">
         <h1>Admin</h1>
-        <button className="link-btn" style={{ color: "var(--red)" }} onClick={onLogout}>Sign out</button>
+        <button className="link-btn muted" onClick={onLogout}>Sign out</button>
       </header>
 
       <div className="stat-strip">
@@ -400,7 +401,7 @@ export default function Admin({ me, notify, onLogout }) {
               </option>
             ))}
           </select>
-          <span className="arrow" aria-hidden="true">→</span>
+          <span className="arrow" aria-hidden="true"><ArrowRight size={15} /></span>
           <select value={copy.to} onChange={(e) => setCopy({ ...copy, to: e.target.value })} aria-label="Copy to day">
             {DAY_NAMES.map((d, i) => (
               <option key={i} value={i}>
@@ -418,8 +419,8 @@ export default function Admin({ me, notify, onLogout }) {
       <div className="roster-toolbar sec-anchor" id="sec-roster">
         <p className="section-title" style={{ margin: 0 }}>Weekly roster</p>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn small secondary" onClick={() => window.print()}>Print</button>
-          <button className="btn small" onClick={() => openNew(0)}>+ New shift</button>
+          <button className="btn small secondary" onClick={() => window.print()}><PrintIcon size={14} /> Print</button>
+          <button className="btn small" onClick={() => openNew(0)}><PlusIcon size={14} /> New shift</button>
         </div>
       </div>
       <div className="seg" style={{ marginBottom: 12 }}>
@@ -472,18 +473,15 @@ export default function Admin({ me, notify, onLogout }) {
                         <div>
                           <strong>{t.staff.name}</strong>
                           <span className="when">{fmtTime(t.start_time)} – {fmtTime(t.end_time)}</span>
-                          {warn.length > 0 && <span className="warn-dot" title={warn.join(" ")}>⚠</span>}
+                          {warn.length > 0 && <span className="warn-dot" title={warn.join(" ")}><WarnIcon size={12} /></span>}
                         </div>
-                        <div className="sub">📍 {t.location.name} · {t.role.name}</div>
+                        <div className="sub"><PinIcon size={12} /> {t.location.name} · {t.role.name}</div>
                       </div>
-                      <svg className="edit-ic" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                      </svg>
+                      <span className="edit-ic"><EditIcon size={16} /></span>
                     </button>
                   );
                 })}
-                <button className="add-shift" onClick={() => openNew(dow)}>+ Add shift</button>
+                <button className="add-shift" onClick={() => openNew(dow)}><PlusIcon size={14} /> Add shift</button>
               </div>
             );
           })}
@@ -530,7 +528,7 @@ export default function Admin({ me, notify, onLogout }) {
               {timeOff === null && <SkeletonLines count={2} />}
               {timeOff !== null && list.length === 0 && (
                 <p className="empty" style={{ padding: "14px 12px" }}>
-                  <span className="big">🏖️</span>
+                  <span className="big"><PalmIcon size={26} /></span>
                   <strong>Nothing to review</strong>
                   Holiday requests from your team will land here.
                 </p>

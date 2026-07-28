@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { CloseIcon } from "./Icons.jsx";
 
 const DISMISSED_KEY = "rosterme_install_dismissed";
 
@@ -136,7 +137,7 @@ export function InstallBanner({ tone = "dark" }) {
         <button className="ib-go" onClick={() => (canPrompt ? install() : setShowIOS(true))}>
           Install
         </button>
-        <button className="ib-x" onClick={dismiss} aria-label="Not now">×</button>
+        <button className="ib-x" onClick={dismiss} aria-label="Not now"><CloseIcon size={15} /></button>
       </div>
       {showIOS && <IOSInstallSheet onClose={() => setShowIOS(false)} />}
     </>

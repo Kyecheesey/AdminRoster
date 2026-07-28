@@ -18,6 +18,8 @@
   --brand-grad: linear-gradient(160deg, #14997e 0%, #0c7f68 48%, #08604d 100%);
   --accent: #ffd66b;
   --accent-ink: #4a3800;
+  --accent-grad: linear-gradient(150deg, #ffd23f, #ffbb0e);
+  --dot-mine: #8af0cf;
 
   /* neutrals */
   --bg: #f5f7f6;
@@ -78,6 +80,12 @@
   --brand-tint: #f4f8f5;
   --brand-grad: linear-gradient(160deg, #5a9878 0%, #3f7d5e 48%, #2b563f 100%);
   --ring: 0 0 0 3px rgba(87, 152, 119, 0.36);
+  /* the platform gold reads as a foreign object against sage; warm sand sits
+     with it while staying legible on the dark brand background */
+  --accent: #ecc98d;
+  --accent-ink: #43340f;
+  --accent-grad: linear-gradient(150deg, #f0d19b, #e0b06a);
+  --dot-mine: #b9e8cf;
 }
 
 * {
@@ -110,6 +118,30 @@ button { font-family: inherit; color: inherit; }
 }
 
 ::selection { background: var(--brand-soft); color: var(--brand-dark); }
+
+/* Numbers that sit in columns or change in place — times, hours, counts,
+   dates — use fixed-width figures so they stop jittering as they update and
+   line up down a list. */
+.time-rail .t, .stat .v, .tl-hour, .tl-days .dt, .tl-days .ct, .bal-chip,
+.day-head-row .day-meta, .hours-pill, .offer-shift-line, .shift-chip .when,
+.avail-times, .tl-bar .bh, .cal-cell .num, .pin-display, .tl-summary span {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Thin, unobtrusive scrollbars — the chunky default ones cheapen a dense
+   layout like the timeline. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong); border-radius: var(--r-pill);
+  border: 2px solid transparent; background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--faint); }
 
 /* Announced to screen readers, invisible on screen. */
 .sr-only {
@@ -202,10 +234,15 @@ button { font-family: inherit; color: inherit; }
 .hero .topbar h1 { color: #fff; }
 .topbar .link-btn {
   color: var(--brand); font-weight: 700; background: none; border: none;
-  font-size: 15px; cursor: pointer; padding: 7px 9px; border-radius: var(--r-sm);
+  font-size: 15px; cursor: pointer; padding: 10px 12px; border-radius: var(--r-sm);
+  min-height: 44px; display: inline-flex; align-items: center; /* thumb-sized */
   transition: background 0.15s;
 }
 .topbar .link-btn:hover { background: var(--brand-soft); }
+/* Signing out is routine, not destructive — alarm red made it the loudest
+   thing on the page. */
+.topbar .link-btn.muted { color: var(--muted); font-weight: 600; }
+.topbar .link-btn.muted:hover { background: var(--wash); color: var(--text-soft); }
 .hero .topbar .link-btn { color: var(--accent); }
 .hero .topbar .link-btn:hover { background: rgba(255,255,255,0.14); }
 .page-head { padding: 18px 18px 12px; }
@@ -299,18 +336,21 @@ button { font-family: inherit; color: inherit; }
 .avatar.lg { width: 72px; height: 72px; font-size: 26px; }
 
 .chip {
-  display: inline-flex; align-items: center; gap: 5px;
+  display: inline-flex; align-items: center; gap: 4px;
   font-size: 12px; font-weight: 700;
   padding: 4px 10px; border-radius: var(--r-pill);
   white-space: nowrap;
 }
 .chip .cdot { width: 6px; height: 6px; border-radius: 50%; }
 .chip.loc { background: var(--brand-soft); color: var(--brand-deep); }
+.chip.role { /* colour comes from roleChipStyle(), shared with the timeline */ }
 .chip.role-centre { background: var(--blue-soft); color: var(--blue-ink); }
 .chip.role-mood { background: var(--coral-soft); color: var(--coral-ink); }
 .chip.swapped { background: var(--yellow-soft); color: var(--yellow-ink); }
 .chip.away { background: var(--red-soft); color: var(--red-ink); }
 .chip.you { background: var(--brand); color: #fff; }
+/* a chip holding only an icon should read as a badge, not an empty pill */
+.chip.only-icon { padding: 6px; border-radius: 50%; }
 
 .badge {
   font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: var(--r-pill);
@@ -368,9 +408,8 @@ button { font-family: inherit; color: inherit; }
   animation: shake 0.32s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 .login-error .le-ic {
-  flex-shrink: 0; width: 21px; height: 21px; border-radius: 50%;
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
   background: #ffdcd6; color: #8a1f14; display: flex; align-items: center; justify-content: center;
-  font-weight: 900; font-size: 13px; font-family: Georgia, "Times New Roman", serif;
 }
 @keyframes shake {
   0% { transform: translateX(0); }
@@ -463,7 +502,10 @@ button { font-family: inherit; color: inherit; }
 }
 .keypad button:hover { background: rgba(255,255,255,0.18); }
 .keypad button:active { transform: scale(0.93); background: rgba(255,255,255,0.24); }
-.keypad .ghost { background: transparent; border-color: transparent; font-size: 15px; font-weight: 700; }
+.keypad .ghost {
+  background: transparent; border-color: transparent; font-size: 15px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
 
 /* ================= calendar ================= */
 .cal-head {
@@ -473,8 +515,8 @@ button { font-family: inherit; color: inherit; }
 .cal-head .month { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
 .cal-head .nav-btn {
   background: rgba(255,255,255,0.13); border: none; color: #fff;
-  width: 36px; height: 36px; border-radius: 12px;
-  font-size: 19px; cursor: pointer; line-height: 1;
+  width: 36px; height: 36px; border-radius: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
   transition: background 0.15s, transform 0.1s;
 }
 .cal-head .nav-btn:hover { background: rgba(255,255,255,0.22); }
@@ -501,7 +543,7 @@ button { font-family: inherit; color: inherit; }
 .cal-cell.today.selected .num { color: var(--brand); }
 .dots { position: absolute; bottom: 3px; display: flex; gap: 3px; }
 .dots i { width: 5px; height: 5px; border-radius: 50%; }
-.dots .mine { background: #8af0cf; }
+.dots .mine { background: var(--dot-mine); }
 .dots .team { background: rgba(255,255,255,0.45); }
 
 /* segmented control */
@@ -560,9 +602,9 @@ button { font-family: inherit; color: inherit; }
   font-weight: 500; line-height: 1.5;
 }
 .empty .big {
-  font-size: 30px; display: flex; align-items: center; justify-content: center;
-  width: 62px; height: 62px; border-radius: 50%; margin: 0 auto 12px;
-  background: var(--brand-tint);
+  display: flex; align-items: center; justify-content: center;
+  width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 13px;
+  background: var(--brand-tint); color: var(--brand);
 }
 .empty strong { display: block; color: var(--text); font-weight: 800; font-size: 15px; margin-bottom: 4px; }
 
@@ -605,6 +647,7 @@ select:focus, input:focus {
 select { cursor: pointer; }
 
 .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 12px 18px; border-radius: 13px; border: none; cursor: pointer;
   background: var(--brand); color: #fff; font-size: 14px; font-weight: 800;
   letter-spacing: 0.1px;
@@ -699,13 +742,25 @@ select { cursor: pointer; }
 .avail-times input[type="time"] {
   padding: 8px 7px; font-size: 13px; flex: 1 1 0; min-width: 0; text-align: center;
 }
+/* Native time inputs refuse to shrink past their intrinsic width, so on the
+   narrowest phones the pair drags the whole page sideways. Give them their own
+   row instead of fighting the control. */
+@media (max-width: 380px) {
+  .avail-day { flex-wrap: wrap; row-gap: 9px; }
+  .avail-times { flex-basis: 100%; order: 3; }
+}
 
 /* ================= form grid =================
    Rows of fixed-width inputs get truncated the moment a phone is narrower than
    their sum. A labelled two-column grid degrades predictably instead. */
 .form-grid, .timeoff-form {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;
+  display: grid; gap: 10px; margin-top: 14px;
+  /* minmax(0,...) not 1fr: a bare 1fr track refuses to shrink below the
+     intrinsic width of a native date/time input, which pushes the whole page
+     sideways on a 320px phone. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
+.form-grid > *, .timeoff-form > * { min-width: 0; }
 .form-grid .full, .timeoff-form .full { grid-column: 1 / -1; }
 .form-grid label, .timeoff-form label {
   display: block; font-size: 11.5px; font-weight: 800; color: var(--muted);
@@ -744,7 +799,7 @@ select { cursor: pointer; }
   margin: 11px 0 4px;
   padding: 10px 12px; background: var(--brand-tint); border-radius: 13px;
 }
-.offer-people .arrow { color: var(--muted); font-size: 15px; font-weight: 800; }
+.offer-people .arrow { color: var(--faint); display: inline-flex; }
 /* Keep a person's name on one line — "Priya / Raman" broken across two reads
    as two people. The row wraps around it instead. */
 .offer-people .pname { font-size: 13px; font-weight: 700; white-space: nowrap; }
@@ -755,13 +810,13 @@ select { cursor: pointer; }
 .fab {
   position: fixed; right: 18px; bottom: 92px; z-index: 25;
   width: 58px; height: 58px; border-radius: 20px; border: none; cursor: pointer;
-  background: linear-gradient(150deg, #ffd23f, #ffbb0e);
-  color: #3a2f00; font-size: 28px; font-weight: 500;
-  box-shadow: 0 8px 22px rgba(255, 187, 20, 0.45);
+  background: var(--accent-grad);
+  color: var(--accent-ink);
+  box-shadow: 0 8px 22px rgba(120, 90, 20, 0.30);
   display: flex; align-items: center; justify-content: center;
   transition: transform 0.12s, box-shadow 0.15s;
 }
-.fab:hover { box-shadow: 0 10px 26px rgba(255, 187, 20, 0.55); }
+.fab:hover { box-shadow: 0 10px 26px rgba(120, 90, 20, 0.38); }
 .fab:active { transform: scale(0.9) rotate(90deg); }
 
 /* ================= modal ================= */
@@ -859,7 +914,7 @@ select { cursor: pointer; }
 .shift-chip .when { color: var(--muted); font-weight: 700; font-size: 12.5px; margin-left: 5px; }
 .shift-chip .sub { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 1px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.shift-chip .edit-ic { color: var(--muted); flex-shrink: 0; opacity: 0.55; }
+.shift-chip .edit-ic { color: var(--muted); flex-shrink: 0; opacity: 0.55; display: flex; }
 .shift-chip:hover .edit-ic { opacity: 1; color: var(--brand); }
 
 .add-shift {
@@ -878,9 +933,10 @@ select { cursor: pointer; }
   text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px;
 }
 .editor-field select, .editor-field input { width: 100%; }
-.editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.editor-grid > * { min-width: 0; }
 .time-field { display: flex; align-items: center; gap: 9px; }
-.time-field .dash { color: var(--muted); font-weight: 800; }
+.time-field .dash { color: var(--faint); display: inline-flex; flex-shrink: 0; }
 .time-field input { flex: 1; }
 .hours-pill {
   display: inline-flex; align-items: center; gap: 5px;
@@ -898,19 +954,19 @@ select { cursor: pointer; }
   background: #fff7e6; border: 1.5px solid #f0d48a; border-radius: 13px;
   padding: 12px 13px; margin: 4px 0 12px; color: var(--yellow-ink); font-size: 13px; font-weight: 600;
 }
-.editor-warn strong { display: block; font-weight: 800; margin-bottom: 4px; }
+.editor-warn strong { display: flex; align-items: center; gap: 6px; font-weight: 800; margin-bottom: 5px; }
 .editor-warn ul { margin: 0 0 4px; padding-left: 18px; }
 .editor-warn li { margin: 2px 0; }
 .editor-warn .tiny { font-size: 11.5px; color: #a9803a; font-weight: 600; }
 
 .shift-chip.has-warn { border-color: #f0d48a; background: #fffaf0; }
-.warn-dot { color: #d69a1e; font-size: 12px; margin-left: 6px; }
+.warn-dot { color: #d69a1e; margin-left: 6px; display: inline-flex; vertical-align: -2px; }
 
 /* copy a day onto another day */
 .copy-day { padding: 15px 17px; }
 .copy-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .copy-row select { flex: 1 1 130px; min-width: 0; }
-.copy-row .arrow { color: var(--muted); font-weight: 800; font-size: 15px; flex-shrink: 0; }
+.copy-row .arrow { color: var(--faint); flex-shrink: 0; display: inline-flex; }
 .copy-row .btn { flex-shrink: 0; }
 
 /* ================= roster timeline =================
@@ -921,10 +977,13 @@ select { cursor: pointer; }
   padding: 14px 14px 16px; margin-bottom: 14px;
 }
 
-.tl-days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
+.tl-days {
+  display: flex; gap: 6px; overflow-x: auto; padding-bottom: 12px;
+  scrollbar-width: none; scroll-snap-type: x proximity;
+}
 .tl-days::-webkit-scrollbar { display: none; }
 .tl-days button {
-  flex: 1 0 auto; min-width: 62px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  flex: 1 0 auto; scroll-snap-align: start; min-width: 62px; display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px 10px; border: 1.5px solid var(--line); border-radius: var(--r-md);
   background: var(--card); cursor: pointer; font-family: inherit;
   transition: border-color 0.15s, background 0.15s;
@@ -987,7 +1046,7 @@ select { cursor: pointer; }
   font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
   color: var(--muted); padding: 12px 2px 4px; position: sticky; left: 0;
 }
-.tl-group .pin { font-size: 10px; }
+.tl-group .pin { display: inline-flex; }
 .tl-group .gn {
   background: var(--wash); color: var(--muted); border-radius: var(--r-pill);
   padding: 1px 7px; font-size: 10px;
@@ -1007,7 +1066,7 @@ select { cursor: pointer; }
 .tl-bar:active { transform: scale(0.99); }
 .tl-bar .bt { overflow: hidden; text-overflow: ellipsis; }
 .tl-bar .bh { margin-left: auto; opacity: 0.82; font-weight: 800; }
-.tl-bar .bw { font-size: 11px; }
+.tl-bar .bw { display: inline-flex; flex-shrink: 0; }
 .tl-bar.warn { box-shadow: inset 0 0 0 2px #f0d48a, var(--shadow-xs); }
 
 @media (min-width: 920px) {
@@ -1094,13 +1153,14 @@ select { cursor: pointer; }
    instead of a scroll hunt. */
 .sec-nav {
   display: flex; gap: 7px; overflow-x: auto; padding: 4px 0 12px;
+  scroll-snap-type: x proximity;
   scrollbar-width: none; -webkit-overflow-scrolling: touch;
   position: sticky; top: 0; z-index: 20;
   background: var(--bg);
 }
 .sec-nav::-webkit-scrollbar { display: none; }
 .sec-nav button {
-  flex-shrink: 0; border: 1.5px solid var(--line); background: var(--card);
+  flex-shrink: 0; scroll-snap-align: start; border: 1.5px solid var(--line); background: var(--card);
   color: var(--text-soft); font-family: inherit; font-size: 13px; font-weight: 700;
   padding: 8px 14px; border-radius: var(--r-pill); cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
@@ -1261,7 +1321,10 @@ select { cursor: pointer; }
   .cal-wrap .sheet .stat-strip.two { margin-top: 0; }
 
   /* --- generic pages --- */
-  .plain-page { padding: 26px 30px 44px; }
+  /* Cap the measure. Past ~1200px a roster stretches into unreadable ribbons
+     and the eye loses the row it was on. */
+  .plain-page { padding: 26px 30px 44px; max-width: 1240px; }
+  .cal-wrap { max-width: 1240px; }
   .plain-page .topbar h1 { font-size: 28px; }
 
   .cards-grid {
@@ -1291,6 +1354,25 @@ select { cursor: pointer; }
   .sec-anchor { scroll-margin-top: 20px; }
 }
 
+/* ================= pointer-only polish =================
+   Lift and hover cues belong to devices with a real cursor. On touch they
+   either never fire or, worse, stick after a tap. */
+@media (hover: hover) and (pointer: fine) {
+  .shift-card, .offer-card, .stat {
+    transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
+  }
+  .shift-card:hover, .offer-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lift);
+  }
+  .name-card { transition: transform 0.18s var(--ease), background 0.15s; }
+  .name-card:hover { transform: translateY(-3px); }
+  .tl-days button { transition: transform 0.18s var(--ease), border-color 0.15s, background 0.15s; }
+  .tl-days button:hover { transform: translateY(-1px); }
+  .fab { transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease); }
+  .fab:hover { transform: translateY(-2px) scale(1.04); }
+}
+
 /* toast */
 .toast {
   position: fixed; left: 50%; bottom: 154px; z-index: 60;
@@ -1305,8 +1387,7 @@ select { cursor: pointer; }
 .toast .toast-ic {
   flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 900; color: #17271f; background: #fff;
-  font-family: Georgia, "Times New Roman", serif;
+  color: #17271f; background: #fff;
 }
 .toast .toast-msg { flex: 1; min-width: 0; text-align: left; }
 /* success */

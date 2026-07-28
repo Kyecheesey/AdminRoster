@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { DAY_NAMES, DAY_SHORT, fmtDate } from "../util.js";
+import { PlaneIcon, PalmIcon } from "../components/Icons.jsx";
 
 const blankWeek = () =>
   DAY_NAMES.map((_, i) => ({
@@ -136,14 +137,14 @@ export default function Availability({ me, notify }) {
         <h3>Time off / away</h3>
         {timeOff.length === 0 && (
           <p className="empty" style={{ padding: "10px 0 4px" }}>
-            <span className="big">🏖️</span>
+            <span className="big"><PalmIcon size={26} /></span>
             <strong>No time off booked</strong>
             Add dates below and {me.isAdmin ? "they'll go straight on the roster." : "your manager will review them."}
           </p>
         )}
         {timeOff.map((u) => (
           <div className="list-row" key={u.id}>
-            <span className="chip away">✈️</span>
+            <span className="chip away only-icon"><PlaneIcon size={13} /></span>
             <div className="grow">
               <strong>{fmtDate(u.start_date)}{u.end_date !== u.start_date ? ` – ${fmtDate(u.end_date)}` : ""}</strong>
               <span className={`ua-badge ${u.status || "approved"}`}>

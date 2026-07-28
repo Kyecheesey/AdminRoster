@@ -3,12 +3,13 @@ import { api } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
 import { LogoMark, OrgLogo, hasOrgLogo, orgTheme } from "../components/Logo.jsx";
 import { InstallBanner } from "../components/InstallPrompt.jsx";
+import { AlertIcon, BackspaceIcon } from "../components/Icons.jsx";
 
 function Banner({ error }) {
   if (!error) return <div className="login-status" />;
   return (
     <div className="login-error" role="alert">
-      <span className="le-ic" aria-hidden="true">!</span>
+      <span className="le-ic"><AlertIcon size={15} /></span>
       <span>{error}</span>
     </div>
   );
@@ -167,7 +168,7 @@ export default function Login({ onLogin }) {
         ))}
         <button className="ghost" onClick={() => { setPicked(null); setPin(""); setError(""); }}>Back</button>
         <button onClick={() => press("0")}>0</button>
-        <button className="ghost" onClick={() => setPin(pin.slice(0, -1))}>⌫</button>
+        <button className="ghost" onClick={() => setPin(pin.slice(0, -1))} aria-label="Delete last digit"><BackspaceIcon size={20} /></button>
       </div>
     </div>
   );

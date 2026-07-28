@@ -112,6 +112,15 @@ export function roleColor(name = "") {
   return ROLE_COLORS[h % ROLE_COLORS.length];
 }
 
+// Chip styling for a role, drawn from the same source as the timeline bars so
+// a role is the same colour wherever it appears. It used to be decided by a
+// substring test for "mood", which meant the roster and the timeline disagreed
+// about what colour a given role was.
+export function roleChipStyle(name = "") {
+  const c = roleColor(name);
+  return { background: c.soft, color: c.bar };
+}
+
 export function hoursBetween(start, end) {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
