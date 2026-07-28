@@ -160,6 +160,13 @@ const OFFER_SELECT = `*,
   offerer:staff!swap_offers_offered_by_fkey(id, name),
   acceptor:staff!swap_offers_accepted_by_fkey(id, name)`;
 
+// unavailability points at staff twice — once for whose time off it is, and
+// once for the admin who reviewed it. PostgREST refuses to guess between two
+// foreign keys, so the embed must name the constraint explicitly or every
+// query touching this table fails.
+const UNAVAIL_SELECT = `*,
+  staff:staff!unavailability_staff_id_fkey(id, name)`;
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
@@ -269,7 +276,7 @@ Deno.serve(async (req: Request) => {
           .gte("shift_date", start).lte("shift_date", end)
           .neq("status", "cancelled")
           .order("shift_date").order("start_time"),
-        supabase.from("unavailability").select("*, staff:staff(id, name)").eq("org_id", me.oid)
+        supabase.from("unavailability").select(UNAVAIL_SELECT).eq("org_id", me.oid)
           .eq("status", "approved")
           .lte("start_date", end).gte("end_date", start),
       ]);
@@ -306,7 +313,7 @@ Deno.serve(async (req: Request) => {
     if (path === "/unavailability" && req.method === "GET") {
       const all = me.adm && url.searchParams.get("all") === "1";
       let q = supabase.from("unavailability")
-        .select("*, staff:staff(id, name)").eq("org_id", me.oid).order("start_date", { ascending: false });
+        .select(UNAVAIL_SELECT).eq("org_id", me.oid).order("start_date", { ascending: false });
       if (!all) q = q.eq("staff_id", me.sid);
       const { data, error } = await q;
       if (error) throw error;
