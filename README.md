@@ -60,15 +60,45 @@ The API base URL is set in `web/src/api.js`. The edge function is deployed with
 `verify_jwt: false` because it implements its own PIN/session auth (see
 `supabase/functions/api/index.ts`).
 
-### End-to-end UI test
-
-`web/audit.mjs` drives the full UI (login, offers, availability, admin) in headless
-Chromium against a stateful mock of the API and asserts each flow:
+## Checks
 
 ```bash
 cd web
 npm i -D playwright   # not kept in package.json to keep deploys light
-node audit.mjs
+npm run verify        # embeds + build + layout + UI, all offline
+```
+
+Each can be run on its own:
+
+| Command | What it proves | Needs |
+|---|---|---|
+| `npm run check:embeds` | Every PostgREST embed resolves to exactly one foreign key | nothing |
+| `npm run check:fit` | No screen scrolls sideways at 320/360/402px | playwright |
+| `npm run audit` | The UI flows work end to end | playwright |
+| `npm run smoke` | **The deployed API actually answers** | credentials + network |
+
+### Why `check:embeds` exists
+
+`unavailability` gained a second foreign key to `staff` (`reviewed_by`, added by the
+holiday-approvals migration). PostgREST will not guess between two paths, so the
+existing `staff:staff(id, name)` embed stopped resolving and every request touching
+that table returned 500 — time off and the calendar were down in production while
+`audit.mjs` passed 36/36, because it mocks the API.
+
+`supabase/check-embeds.mjs` reads the foreign keys out of the migrations and the
+embeds out of the edge function, and fails when an embed is ambiguous. It needs no
+database, credentials or network, so it can run on every commit. Its foreign-key
+parse was verified to match the live schema exactly (22 keys).
+
+### Why `smoke` exists
+
+`audit.mjs` drives the UI against a stateful **mock** of the API, so it proves the
+screens work and says nothing about the deployed function. `smoke.mjs` signs in for
+real and asserts a 200 from every read endpoint — run it after deploying the edge
+function:
+
+```bash
+ROSTER_ORG=mm ROSTER_STAFF="Your Name" ROSTER_PIN=1234 npm run smoke
 ```
 
 ## Seed data
