@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api.js";
-import { DAY_NAMES, fmtTime, fmtDate, fmtDateLong, todayIso, addDays, hoursBetween, weekEndingIso, dayMonth } from "../util.js";
+import { DAY_NAMES, fmtTime, fmtDate, fmtDateLong, todayIso, addDays, hoursBetween, weekEndingIso, dayMonth,
+         FREQUENCIES, NEEDS_DATE, freqLabel, occursOn, dowOf } from "../util.js";
 import Avatar from "../components/Avatar.jsx";
 import { SkeletonRows, SkeletonLines } from "../components/Skeleton.jsx";
 import RosterTimeline from "../components/RosterTimeline.jsx";
 import { PinIcon, PalmIcon, WarnIcon, EditIcon, PrintIcon, PlusIcon, ArrowRight } from "../components/Icons.jsx";
 
-const blankShift = { id: null, staff_id: "", day_of_week: 0, start_time: "08:00", end_time: "13:00", location_id: "", role_id: "" };
+const blankShift = {
+  id: null, staff_id: "", day_of_week: 0, start_time: "08:00", end_time: "13:00",
+  location_id: "", role_id: "", frequency: "weekly", start_date: "", end_date: "",
+};
 const hm = (t) => (t ? t.slice(0, 5) : "");
 // two [start,end) time ranges (HH:MM strings) overlap
 const overlaps = (aS, aE, bS, bE) => aS < bE && bS < aE;
@@ -28,9 +32,13 @@ function duplicateStart(f, template) {
   return (template ?? []).find(
     (t) =>
       t.staff_id === f.staff_id &&
-      t.day_of_week === dow &&
       t.id !== f.id &&
-      hm(t.start_time) === f.start_time,
+      hm(t.start_time) === f.start_time &&
+      // only a real clash if both can fall on the same day; a one-off in
+      // August cannot collide with a weekly shift it never shares a date with
+      (f.frequency === "once" && t.frequency === "once"
+        ? t.start_date === f.start_date
+        : t.day_of_week === dow),
   ) ?? null;
 }
 
@@ -57,19 +65,37 @@ function shiftWarnings(f, template, availability) {
 }
 
 // Shared add/edit sheet for a single fixed-roster shift.
-function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, notify }) {
+function recurrenceSummary(f) {
+  const on = f.start_date ? fmtDate(f.start_date) : "a date you pick";
+  const until = f.end_date ? `, until ${fmtDate(f.end_date)}` : "";
+  switch (f.frequency) {
+    case "once": return `Happens once, on ${on}. It will not repeat.`;
+    case "daily": return `Every day${until}.`;
+    case "fortnightly": return `Every second ${DAY_NAMES[Number(f.day_of_week)]}, starting ${on}${until}.`;
+    case "monthly_date": return `The same date each month, starting ${on}${until}.`;
+    case "monthly_weekday": return `The same weekday each month (e.g. the 3rd ${DAY_NAMES[Number(f.day_of_week)]}), starting ${on}${until}.`;
+    default: return `Every ${DAY_NAMES[Number(f.day_of_week)]}${until}.`;
+  }
+}
+
+function ShiftEditor({ meta, template, availability, initial, weekStart, onClose, onSaved, notify }) {
   const [f, setF] = useState(initial);
   const [busy, setBusy] = useState(false);
   const isEdit = Boolean(f.id);
   const set = (patch) => setF((prev) => ({ ...prev, ...patch }));
   const dupe = useMemo(() => duplicateStart(f, template), [f, template]);
-  const valid = f.staff_id && f.location_id && f.role_id && f.end_time > f.start_time && !dupe;
+  const needsDate = NEEDS_DATE.includes(f.frequency);
+  const valid =
+    f.staff_id && f.location_id && f.role_id && f.end_time > f.start_time && !dupe &&
+    (!needsDate || Boolean(f.start_date)) &&
+    (!f.end_date || !f.start_date || f.end_date >= f.start_date);
   const dur = f.end_time > f.start_time ? hoursBetween(f.start_time, f.end_time) : 0;
   const warnings = useMemo(() => shiftWarnings(f, template ?? [], availability), [f, template, availability]);
 
   const save = () => {
     if (!f.staff_id || !f.location_id || !f.role_id) return notify("Pick staff, location and role.", "error");
     if (f.end_time <= f.start_time) return notify("End time must be after start time.", "error");
+    if (needsDate && !f.start_date) return notify("Pick a date for this repeat option.", "error");
     if (dupe) {
       return notify(
         `They already start a shift at ${fmtTime(dupe.start_time)} that day — change the start time.`,
@@ -81,6 +107,9 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
       staff_id: f.staff_id, day_of_week: Number(f.day_of_week),
       start_time: f.start_time, end_time: f.end_time,
       location_id: f.location_id, role_id: f.role_id,
+      frequency: f.frequency,
+      start_date: f.start_date || null,
+      end_date: f.end_date || null,
     };
     const req = f.id
       ? api("/admin/template", { method: "PUT", body: { ...payload, id: f.id } })
@@ -114,19 +143,57 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
         <h2>{isEdit ? "Edit shift" : "Add shift"}</h2>
 
         <div className="editor-field">
-          <label>Staff member</label>
-          <select value={f.staff_id} onChange={(e) => set({ staff_id: e.target.value })}>
+          <label htmlFor="ed-staff">Staff member</label>
+          <select id="ed-staff" value={f.staff_id} onChange={(e) => set({ staff_id: e.target.value })}>
             <option value="">Choose staff…</option>
             {active.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
 
         <div className="editor-field">
-          <label>Day of week</label>
-          <select value={f.day_of_week} onChange={(e) => set({ day_of_week: Number(e.target.value) })}>
-            {DAY_NAMES.map((d, i) => <option key={i} value={i}>{d}</option>)}
+          <label htmlFor="ed-freq">Repeats</label>
+          <select
+            id="ed-freq"
+            value={f.frequency}
+            onChange={(e) => {
+              const frequency = e.target.value;
+              // moving to a dated pattern needs an anchor; seed it with the
+              // selected week's matching day so nothing is ever half-filled
+              const seed = f.start_date || addDays(weekStart, Number(f.day_of_week));
+              set({ frequency, start_date: NEEDS_DATE.includes(frequency) ? seed : f.start_date });
+            }}
+          >
+            {FREQUENCIES.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </div>
+
+        {(f.frequency === "weekly" || f.frequency === "fortnightly") && (
+          <div className="editor-field">
+            <label htmlFor="ed-dow">Day of week</label>
+            <select id="ed-dow" value={f.day_of_week} onChange={(e) => set({ day_of_week: Number(e.target.value) })}>
+              {DAY_NAMES.map((d, i) => <option key={i} value={i}>{d}</option>)}
+            </select>
+          </div>
+        )}
+
+        {NEEDS_DATE.includes(f.frequency) && (
+          <div className="editor-field">
+            <label htmlFor="ed-start">{f.frequency === "once" ? "Date" : "First date"}</label>
+            <input
+              id="ed-start" type="date" value={f.start_date}
+              onChange={(e) => set({ start_date: e.target.value, day_of_week: e.target.value ? dowOf(e.target.value) : f.day_of_week })}
+            />
+          </div>
+        )}
+
+        {f.frequency !== "once" && (
+          <div className="editor-field">
+            <label htmlFor="ed-end">Ends (optional)</label>
+            <input id="ed-end" type="date" value={f.end_date} onChange={(e) => set({ end_date: e.target.value })} />
+          </div>
+        )}
+
+        <p className="repeat-note">{recurrenceSummary(f)}</p>
 
         <div className="editor-field">
           <label>Time</label>
@@ -140,15 +207,15 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
 
         <div className="editor-grid">
           <div className="editor-field">
-            <label>Location</label>
-            <select value={f.location_id} onChange={(e) => set({ location_id: e.target.value })}>
+            <label htmlFor="ed-loc">Location</label>
+            <select id="ed-loc" value={f.location_id} onChange={(e) => set({ location_id: e.target.value })}>
               <option value="">Choose…</option>
               {meta?.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </div>
           <div className="editor-field">
-            <label>Role</label>
-            <select value={f.role_id} onChange={(e) => set({ role_id: e.target.value })}>
+            <label htmlFor="ed-role">Role</label>
+            <select id="ed-role" value={f.role_id} onChange={(e) => set({ role_id: e.target.value })}>
               <option value="">Choose…</option>
               {meta?.roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
@@ -298,6 +365,9 @@ export default function Admin({ me, notify, onLogout }) {
     id: t.id, staff_id: t.staff_id, day_of_week: t.day_of_week,
     start_time: hm(t.start_time), end_time: hm(t.end_time),
     location_id: t.location_id, role_id: t.role_id,
+    frequency: t.frequency ?? "weekly",
+    start_date: t.start_date ?? "",
+    end_date: t.end_date ?? "",
   });
   const onSaved = (used) => {
     if (used?.location_id) setLastUsed({ location_id: used.location_id, role_id: used.role_id });
@@ -447,7 +517,7 @@ export default function Admin({ me, notify, onLogout }) {
           <select value={copy.from} onChange={(e) => setCopy({ ...copy, from: e.target.value })} aria-label="Copy from day">
             {DAY_NAMES.map((d, i) => (
               <option key={i} value={i}>
-                {d} ({(template ?? []).filter((t) => t.day_of_week === i).length})
+                {d} ({(template ?? []).filter((t) => occursOn(t, addDays(weekStart, i))).length})
               </option>
             ))}
           </select>
@@ -455,7 +525,7 @@ export default function Admin({ me, notify, onLogout }) {
           <select value={copy.to} onChange={(e) => setCopy({ ...copy, to: e.target.value })} aria-label="Copy to day">
             {DAY_NAMES.map((d, i) => (
               <option key={i} value={i}>
-                {d} ({(template ?? []).filter((t) => t.day_of_week === i).length})
+                {d} ({(template ?? []).filter((t) => occursOn(t, addDays(weekStart, i))).length})
               </option>
             ))}
           </select>
@@ -500,7 +570,9 @@ export default function Admin({ me, notify, onLogout }) {
       {template !== null && rosterView === "cards" && (
         <div className="cards-grid">
           {DAY_NAMES.map((day, dow) => {
-            const rows = template.filter((t) => t.day_of_week === dow);
+            // by date, not weekday: a fortnightly or one-off shift belongs
+            // to some weeks only, and this view shows one specific week
+            const rows = template.filter((t) => occursOn(t, addDays(weekStart, dow)));
             return (
               <div className="card" key={dow}>
                 <div className="day-head-row">
@@ -746,7 +818,9 @@ export default function Admin({ me, notify, onLogout }) {
         <div className="print-roster">
           <h1>The Mood &amp; Mind Centre — Weekly Roster</h1>
           {DAY_NAMES.map((day, dow) => {
-            const rows = template.filter((t) => t.day_of_week === dow);
+            // by date, not weekday: a fortnightly or one-off shift belongs
+            // to some weeks only, and this view shows one specific week
+            const rows = template.filter((t) => occursOn(t, addDays(weekStart, dow)));
             if (rows.length === 0) return null;
             return (
               <div className="print-day" key={dow}>
@@ -775,6 +849,7 @@ export default function Admin({ me, notify, onLogout }) {
           template={template}
           availability={availability}
           initial={editing}
+          weekStart={weekStart}
           notify={notify}
           onClose={() => setEditing(null)}
           onSaved={onSaved}

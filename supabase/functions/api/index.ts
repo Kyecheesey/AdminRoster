@@ -81,6 +81,70 @@ function toDow(dateStr: string): number {
   return (new Date(dateStr + "T00:00:00Z").getUTCDay() + 6) % 7;
 }
 
+/* ---------- shift recurrence ----------
+ * Kept deliberately simple and total: every rule answers one question — does
+ * this template row happen on this date? The same rules are mirrored in the
+ * web app so the roster preview and the generated shifts always agree.
+ */
+
+const dayOfMonth = (d: string) => Number(d.slice(8, 10));
+
+function daysInMonth(d: string): number {
+  const [y, m] = d.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+// 1 for the 1st-7th, 2 for the 8th-14th … i.e. "the Nth <weekday> of the month"
+const nthWeekdayOfMonth = (d: string) => Math.floor((dayOfMonth(d) - 1) / 7) + 1;
+
+// whole weeks between two dates, counted from the Monday of each week
+function weeksBetween(a: string, b: string): number {
+  const ms = (s: string) => {
+    const t = new Date(s + "T00:00:00Z");
+    t.setUTCDate(t.getUTCDate() - toDow(s)); // back to Monday
+    return t.getTime();
+  };
+  return Math.round((ms(b) - ms(a)) / (7 * 86400000));
+}
+
+type Recurring = {
+  frequency?: string | null;
+  day_of_week: number;
+  start_date?: string | null;
+  end_date?: string | null;
+};
+
+export function occursOn(t: Recurring, date: string): boolean {
+  if (t.start_date && date < t.start_date) return false;
+  if (t.end_date && date > t.end_date) return false;
+  const dow = toDow(date);
+
+  switch (t.frequency ?? "weekly") {
+    case "once":
+      return Boolean(t.start_date) && date === t.start_date;
+    case "daily":
+      return true;
+    case "fortnightly":
+      if (dow !== t.day_of_week) return false;
+      // no anchor is indistinguishable from weekly; don't silently drop shifts
+      if (!t.start_date) return true;
+      return weeksBetween(t.start_date, date) % 2 === 0;
+    case "monthly_date": {
+      if (!t.start_date) return false;
+      // clamp so the 31st still lands in February rather than vanishing
+      const target = Math.min(dayOfMonth(t.start_date), daysInMonth(date));
+      return dayOfMonth(date) === target;
+    }
+    case "monthly_weekday":
+      if (!t.start_date) return false;
+      return dow === toDow(t.start_date) &&
+        nthWeekdayOfMonth(date) === nthWeekdayOfMonth(t.start_date);
+    case "weekly":
+    default:
+      return dow === t.day_of_week;
+  }
+}
+
 function* dateRange(start: string, end: string): Generator<string> {
   const d = new Date(start + "T00:00:00Z");
   const e = new Date(end + "T00:00:00Z");
@@ -126,9 +190,8 @@ async function ensureInstances(orgId: string, start: string, end: string) {
   const have = new Set(existingRes.data!.map((r) => `${r.template_id}|${r.shift_date}`));
   const rows = [];
   for (const date of dateRange(start, end)) {
-    const dow = toDow(date);
     for (const t of tplRes.data!) {
-      if (t.day_of_week !== dow) continue;
+      if (!occursOn(t, date)) continue;
       if (have.has(`${t.id}|${date}`)) continue;
       rows.push({
         org_id: orgId,
@@ -148,6 +211,35 @@ async function ensureInstances(orgId: string, start: string, end: string) {
       .upsert(rows, { onConflict: "staff_id,shift_date,start_time", ignoreDuplicates: true });
     if (insErr) throw insErr;
   }
+}
+
+const FREQUENCIES = ["once", "daily", "weekly", "fortnightly", "monthly_date", "monthly_weekday"];
+const isDate = (s: unknown) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+/** Normalise and validate the recurrence half of a template payload. */
+function recurrenceFrom(body: Record<string, unknown>): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+  const frequency = (body.frequency as string) ?? "weekly";
+  if (!FREQUENCIES.includes(frequency)) return { ok: false, error: "Unknown repeat option" };
+
+  const start_date = body.start_date ? String(body.start_date) : null;
+  const end_date = body.end_date ? String(body.end_date) : null;
+  if (start_date && !isDate(start_date)) return { ok: false, error: "Start date must be YYYY-MM-DD" };
+  if (end_date && !isDate(end_date)) return { ok: false, error: "End date must be YYYY-MM-DD" };
+  if (start_date && end_date && end_date < start_date) {
+    return { ok: false, error: "End date is before the start date" };
+  }
+  // these patterns have no meaning without a date to count from
+  if (!["weekly", "daily"].includes(frequency) && !start_date) {
+    return { ok: false, error: "Pick a date for this repeat option" };
+  }
+
+  // Keep day_of_week truthful even when the pattern is not weekly — the roster
+  // views group by it, so a one-off must still land on its real weekday.
+  const day_of_week = ["weekly", "daily"].includes(frequency)
+    ? Number(body.day_of_week ?? 0)
+    : toDow(start_date!);
+
+  return { ok: true, value: { frequency, start_date, end_date, day_of_week } };
 }
 
 const SHIFT_SELECT = `*,
@@ -503,22 +595,26 @@ Deno.serve(async (req: Request) => {
       }
 
       if (path === "/admin/template" && req.method === "POST") {
-        const { staff_id, day_of_week, start_time, end_time, location_id, role_id } = body;
+        const { staff_id, start_time, end_time, location_id, role_id } = body;
         if (!staff_id || !location_id || !role_id) return json({ error: "Staff, location and role are required" }, 400);
         if (end_time <= start_time) return json({ error: "End time must be after start time" }, 400);
+        const rec = recurrenceFrom(body);
+        if (!rec.ok) return json({ error: rec.error }, 400);
         const { error } = await supabase.from("roster_template")
-          .insert({ staff_id, day_of_week, start_time, end_time, location_id, role_id, org_id: me.oid });
+          .insert({ staff_id, start_time, end_time, location_id, role_id, org_id: me.oid, ...rec.value });
         if (error) throw error;
         return json({ ok: true });
       }
 
       if (path === "/admin/template" && req.method === "PUT") {
-        const { id, staff_id, day_of_week, start_time, end_time, location_id, role_id } = body;
+        const { id, staff_id, start_time, end_time, location_id, role_id } = body;
         if (!id) return json({ error: "Missing shift id" }, 400);
         if (!staff_id || !location_id || !role_id) return json({ error: "Staff, location and role are required" }, 400);
         if (end_time <= start_time) return json({ error: "End time must be after start time" }, 400);
+        const rec = recurrenceFrom(body);
+        if (!rec.ok) return json({ error: rec.error }, 400);
         const { error } = await supabase.from("roster_template")
-          .update({ staff_id, day_of_week, start_time, end_time, location_id, role_id })
+          .update({ staff_id, start_time, end_time, location_id, role_id, ...rec.value })
           .eq("id", id).eq("org_id", me.oid);
         if (error) throw error;
         return json({ ok: true });

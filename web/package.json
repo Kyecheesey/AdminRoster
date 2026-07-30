@@ -11,7 +11,8 @@
     "check:fit": "node checkfit.mjs",
     "audit": "node audit.mjs",
     "smoke": "node smoke.mjs",
-    "verify": "npm run check:embeds && npm run build && npm run check:fit && npm run audit"
+    "verify": "npm run check:embeds && npm run test:recurrence && npm run build && npm run check:fit && npm run audit",
+    "test:recurrence": "node recurrence.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

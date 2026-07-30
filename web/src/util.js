@@ -86,6 +86,70 @@ export function timeParts(t) {
   return [`${h12}:${String(m).padStart(2, "0")}`, ampm];
 }
 
+/* ---------- shift recurrence ----------
+ * A mirror of occursOn() in supabase/functions/api/index.ts. The server decides
+ * which shifts actually get created; this lets the roster show the same answer
+ * before you press Build. If you change one, change both — audit.mjs checks a
+ * table of cases against this copy.
+ */
+
+export const FREQUENCIES = [
+  { id: "weekly", label: "Every week" },
+  { id: "fortnightly", label: "Every 2 weeks" },
+  { id: "daily", label: "Every day" },
+  { id: "monthly_date", label: "Monthly (same date)" },
+  { id: "monthly_weekday", label: "Monthly (same weekday)" },
+  { id: "once", label: "One-off (single date)" },
+];
+
+// frequencies that are meaningless without a date to count from
+export const NEEDS_DATE = ["once", "fortnightly", "monthly_date", "monthly_weekday"];
+
+export const freqLabel = (id) => FREQUENCIES.find((f) => f.id === id)?.label ?? "Every week";
+
+const dayOfMonth = (d) => Number(d.slice(8, 10));
+
+function daysInMonth(d) {
+  const [y, m] = d.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+const nthWeekdayOfMonth = (d) => Math.floor((dayOfMonth(d) - 1) / 7) + 1;
+
+function weeksBetween(a, b) {
+  const monday = (s) => parseIso(addDays(s, -dowOf(s))).getTime();
+  return Math.round((monday(b) - monday(a)) / (7 * 86400000));
+}
+
+export function occursOn(t, date) {
+  if (t.start_date && date < t.start_date) return false;
+  if (t.end_date && date > t.end_date) return false;
+  const dow = dowOf(date);
+
+  switch (t.frequency ?? "weekly") {
+    case "once":
+      return Boolean(t.start_date) && date === t.start_date;
+    case "daily":
+      return true;
+    case "fortnightly":
+      if (dow !== t.day_of_week) return false;
+      if (!t.start_date) return true;
+      return weeksBetween(t.start_date, date) % 2 === 0;
+    case "monthly_date": {
+      if (!t.start_date) return false;
+      const target = Math.min(dayOfMonth(t.start_date), daysInMonth(date));
+      return dayOfMonth(date) === target;
+    }
+    case "monthly_weekday":
+      if (!t.start_date) return false;
+      return dow === dowOf(t.start_date) &&
+        nthWeekdayOfMonth(date) === nthWeekdayOfMonth(t.start_date);
+    case "weekly":
+    default:
+      return dow === t.day_of_week;
+  }
+}
+
 // "HH:MM" (or "HH:MM:SS") -> minutes since midnight
 export function toMinutes(t) {
   if (!t) return 0;

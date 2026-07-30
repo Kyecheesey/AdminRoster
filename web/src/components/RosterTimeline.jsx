@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { DAY_NAMES, DAY_SHORT, fmtTime, hoursBetween, addDays, dayMonth, toMinutes, roleColor } from "../util.js";
+import { DAY_NAMES, DAY_SHORT, fmtTime, hoursBetween, addDays, dayMonth, toMinutes, roleColor, occursOn, freqLabel } from "../util.js";
 import { PinIcon, CalendarIcon, WarnIcon, PlusIcon } from "./Icons.jsx";
 
 const hm = (t) => (t ? t.slice(0, 5) : "");
@@ -16,13 +16,15 @@ const PX_PER_HOUR = 62; // wide enough to read a 30-minute bar
 export default function RosterTimeline({ template, weekStart, availability, onEdit, onAdd }) {
   const [dow, setDow] = useState(() => (new Date().getDay() + 6) % 7);
 
+  // the tabs show a real week, so resolve occurrences against that date
+  const date = addDays(weekStart, dow);
   const rows = useMemo(
     () =>
       (template ?? [])
-        .filter((t) => t.day_of_week === dow)
+        .filter((t) => occursOn(t, date))
         .slice()
         .sort((a, b) => hm(a.start_time).localeCompare(hm(b.start_time))),
-    [template, dow],
+    [template, date],
   );
 
   // Only show the hours the day actually uses, padded to whole hours, so a
@@ -79,7 +81,7 @@ export default function RosterTimeline({ template, weekStart, availability, onEd
     <div className="tl-wrap">
       <div className="tl-days" role="tablist" aria-label="Day of week">
         {DAY_NAMES.map((d, i) => {
-          const n = (template ?? []).filter((t) => t.day_of_week === i).length;
+          const n = (template ?? []).filter((t) => occursOn(t, addDays(weekStart, i))).length;
           return (
             <button
               key={i} role="tab" aria-selected={i === dow}
@@ -174,7 +176,7 @@ export default function RosterTimeline({ template, weekStart, availability, onEd
                             color: c.ink,
                           }}
                           onClick={() => onEdit(t)}
-                          title={`${t.staff.name} · ${fmtTime(t.start_time)}–${fmtTime(t.end_time)} · ${t.role?.name ?? ""}`}
+                          title={`${t.staff.name} · ${fmtTime(t.start_time)}–${fmtTime(t.end_time)} · ${t.role?.name ?? ""} · ${freqLabel(t.frequency)}`}
                         >
                           <span className="bt">{t.role?.name}</span>
                           <span className="bh">{hoursBetween(hm(t.start_time), hm(t.end_time))}h</span>
