@@ -274,6 +274,11 @@ check("template shift added", state.template.length === 2 && state.template[1].s
 
 // 9b. admin: edit an existing shift's time via the editor (PUT)
 check("roster timeline is the default view", await page.locator(".tl-wrap").isVisible());
+// The timeline opens on today, so pick a day the mock roster actually has
+// shifts on — otherwise this assertion passes or fails depending on the
+// weekday the suite happens to run.
+await page.locator(".tl-days button").nth(state.template[0].day_of_week).click();
+await page.waitForTimeout(350);
 check("timeline draws a bar per shift", (await page.locator(".tl-bar").count()) > 0);
 await page.getByRole("button", { name: "By day" }).click();
 await page.waitForTimeout(300);
@@ -298,6 +303,30 @@ check(
   "copy day duplicates a day's shifts onto another day",
   state.template.filter((t) => t.day_of_week === dstDow).length === dstBefore + srcCount,
 );
+
+// 9b-iii. a same-start duplicate is blocked, not silently swallowed by the
+// UNIQUE (staff_id, shift_date, start_time) constraint on shift_instances
+await page.getByRole("button", { name: "New shift" }).click();
+await page.waitForTimeout(300);
+{
+  const dup = state.template[0];
+  await modal.locator("select").nth(0).selectOption({ label: byId[dup.staff_id].name });
+  await modal.locator("select").nth(1).selectOption({ index: dup.day_of_week });
+  await modal.locator('input[type="time"]').nth(0).fill(dup.start_time.slice(0, 5));
+  await modal.locator('input[type="time"]').nth(1).fill("23:30");
+  await modal.locator("select").nth(2).selectOption({ label: "Upper Coomera" });
+  await modal.locator("select").nth(3).selectOption({ label: "Centre Admin" });
+  await page.waitForTimeout(250);
+  check("duplicate start time is blocked", await modal.locator(".editor-block").isVisible());
+  check("save is disabled on duplicate start",
+    await modal.getByRole("button", { name: "Add shift", exact: true }).isDisabled());
+  await modal.locator('input[type="time"]').nth(0).fill("21:45");
+  await page.waitForTimeout(250);
+  check("changing the start time clears the block",
+    (await modal.locator(".editor-block").count()) === 0);
+  await modal.getByRole("button", { name: "Cancel" }).click();
+  await page.waitForTimeout(200);
+}
 
 // 9c. editor flags an availability clash (Cass available 08:00–19:00 Mon)
 await page.getByRole("button", { name: "New shift" }).click();

@@ -12,6 +12,28 @@ const hm = (t) => (t ? t.slice(0, 5) : "");
 // two [start,end) time ranges (HH:MM strings) overlap
 const overlaps = (aS, aE, bS, bE) => aS < bE && bS < aE;
 
+/**
+ * The one clash the database physically cannot store.
+ *
+ * shift_instances is UNIQUE (staff_id, shift_date, start_time) and the
+ * generator upserts with ignoreDuplicates, so two template shifts for the same
+ * person, same day, same start time do not error — the second is silently
+ * dropped and simply never appears on anyone's calendar. A roster that looks
+ * right in the editor and is missing a shift in real life is the worst outcome
+ * available, so this is a hard block rather than a warning.
+ */
+function duplicateStart(f, template) {
+  if (!f.staff_id) return null;
+  const dow = Number(f.day_of_week);
+  return (template ?? []).find(
+    (t) =>
+      t.staff_id === f.staff_id &&
+      t.day_of_week === dow &&
+      t.id !== f.id &&
+      hm(t.start_time) === f.start_time,
+  ) ?? null;
+}
+
 // Flag double-books and availability clashes for the shift being edited.
 function shiftWarnings(f, template, availability) {
   if (!f.staff_id) return [];
@@ -40,13 +62,20 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
   const [busy, setBusy] = useState(false);
   const isEdit = Boolean(f.id);
   const set = (patch) => setF((prev) => ({ ...prev, ...patch }));
-  const valid = f.staff_id && f.location_id && f.role_id && f.end_time > f.start_time;
+  const dupe = useMemo(() => duplicateStart(f, template), [f, template]);
+  const valid = f.staff_id && f.location_id && f.role_id && f.end_time > f.start_time && !dupe;
   const dur = f.end_time > f.start_time ? hoursBetween(f.start_time, f.end_time) : 0;
   const warnings = useMemo(() => shiftWarnings(f, template ?? [], availability), [f, template, availability]);
 
   const save = () => {
     if (!f.staff_id || !f.location_id || !f.role_id) return notify("Pick staff, location and role.", "error");
     if (f.end_time <= f.start_time) return notify("End time must be after start time.", "error");
+    if (dupe) {
+      return notify(
+        `They already start a shift at ${fmtTime(dupe.start_time)} that day — change the start time.`,
+        "error",
+      );
+    }
     setBusy(true);
     const payload = {
       staff_id: f.staff_id, day_of_week: Number(f.day_of_week),
@@ -126,6 +155,14 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
           </div>
         </div>
 
+        {dupe && (
+          <div className="editor-block" role="alert">
+            <strong><WarnIcon size={14} /> Two shifts can't start at the same time</strong>
+            {dupe.staff.name} already starts a shift at {fmtTime(dupe.start_time)} on {DAY_NAMES[Number(f.day_of_week)]}
+            {" "}(until {fmtTime(dupe.end_time)}). Only one of them would ever reach the roster, so shift the start
+            time by at least a minute.
+          </div>
+        )}
         {warnings.length > 0 && (
           <div className="editor-warn" role="alert">
             <strong><WarnIcon size={14} /> Heads up</strong>
