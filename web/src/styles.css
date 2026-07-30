@@ -507,6 +507,74 @@ button { font-family: inherit; color: inherit; }
   display: flex; align-items: center; justify-content: center;
 }
 
+/* ================= day header ================= */
+.greet-bar { align-items: flex-start; gap: 12px; padding: 14px 2px 14px; }
+.greet h1 { font-size: 23px; font-weight: 800; letter-spacing: -0.5px; color: #fff; line-height: 1.15; }
+.greet-date { color: rgba(255,255,255,0.78); font-size: 13.5px; font-weight: 600; margin-top: 3px; }
+.greet-side { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.weather {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.16);
+  color: #fff; padding: 7px 11px; border-radius: var(--r-pill);
+  font-size: 13px; font-weight: 700; white-space: nowrap;
+  animation: fade-in 0.4s ease both;
+}
+.weather .wt { font-variant-numeric: tabular-nums; }
+.weather .wl { color: rgba(255,255,255,0.72); font-weight: 600; font-size: 12px; }
+
+/* ---- up next: the answer to "am I working?" ---- */
+.upnext {
+  background: var(--card); border-radius: var(--r-lg); padding: 16px 17px;
+  box-shadow: var(--shadow-card); margin-bottom: 12px;
+  display: flex; flex-direction: column; gap: 3px;
+  border-left: 4px solid var(--brand);
+  animation: fade-up 0.3s ease both;
+}
+.upnext.live { border-left-color: var(--green); background: linear-gradient(180deg, var(--green-soft) 0%, var(--card) 60%); }
+.upnext.none { border-left-color: var(--line-strong); }
+.un-label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px;
+  color: var(--muted);
+}
+.upnext strong { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.upnext.none strong { font-size: 17px; color: var(--text-soft); }
+.un-when { font-size: 13.5px; font-weight: 700; color: var(--brand-deep); }
+.upnext.live .un-when { color: var(--green-ink); }
+.un-sub, .un-meta { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.un-meta { display: flex; align-items: center; gap: 5px; margin-top: 5px; }
+
+/* a slow pulse, so "on now" reads as live without demanding attention */
+.pulse {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 0 rgba(47, 162, 98, 0.55);
+  animation: pulse 2.4s ease-out infinite;
+}
+@keyframes pulse {
+  70% { box-shadow: 0 0 0 9px rgba(47, 162, 98, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(47, 162, 98, 0); }
+}
+
+/* ---- quote of the day ---- */
+.quote {
+  margin: 6px 0 4px; padding: 16px 18px;
+  background: var(--brand-tint); border-radius: var(--r-lg);
+  animation: fade-up 0.35s 0.1s ease both;
+}
+.quote blockquote {
+  font-size: 15px; line-height: 1.5; color: var(--brand-dark);
+  font-family: Georgia, "Times New Roman", serif; font-style: italic;
+}
+.quote figcaption {
+  margin-top: 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--brand);
+}
+
+@media (min-width: 920px) {
+  .greet h1 { font-size: 25px; }
+}
+
 /* ================= calendar ================= */
 .cal-head {
   display: flex; align-items: center; justify-content: space-between;

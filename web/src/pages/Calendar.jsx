@@ -5,6 +5,7 @@ import { iso, todayIso, parseIso, fmtDate, fmtDateLong, DAY_SHORT, dowOf, addDay
 import ShiftCard from "../components/ShiftCard.jsx";
 import { ChevronLeft, ChevronRight, PlaneIcon, SunIcon } from "../components/Icons.jsx";
 import { SkeletonRows } from "../components/Skeleton.jsx";
+import { Greeting, Weather, UpNext, QuoteOfTheDay } from "../components/DayHeader.jsx";
 
 function monthGrid(year, month) {
   // returns array of date-strings covering the month, padded to full Mon-Sun weeks
@@ -93,18 +94,21 @@ export default function Calendar({ me, notify }) {
   return (
     <div className="cal-wrap">
       <div className="hero">
-        <header className="topbar">
-          <h1>Calendar</h1>
-          <button
-            className="link-btn"
-            onClick={() => {
-              const d = new Date();
-              setView({ y: d.getFullYear(), m: d.getMonth() });
-              setSelected(today);
-            }}
-          >
-            Today
-          </button>
+        <header className="topbar greet-bar">
+          <Greeting name={me.name} />
+          <div className="greet-side">
+            <Weather />
+            <button
+              className="link-btn"
+              onClick={() => {
+                const d = new Date();
+                setView({ y: d.getFullYear(), m: d.getMonth() });
+                setSelected(today);
+              }}
+            >
+              Today
+            </button>
+          </div>
         </header>
         <div className="cal-head">
           <button className="nav-btn" onClick={() => nav(-1)} aria-label="Previous month"><ChevronLeft size={18} /></button>
@@ -143,6 +147,7 @@ export default function Calendar({ me, notify }) {
       </div>
 
       <div className="sheet">
+        <UpNext shifts={data.shifts} me={me} />
         <div className="stat-strip two">
           <div className="stat">
             <div className="v">{myWeek.length}</div>
@@ -183,6 +188,7 @@ export default function Calendar({ me, notify }) {
               : `Nothing scheduled for ${fmtDate(selected)}.`}
           </p>
         )}
+        {!loading && dayShifts.length === 0 && away.length === 0 && <QuoteOfTheDay />}
         {dayShifts.map((s) => {
           const isMine = s.staff_id === me.id;
           const canOffer = isMine && s.shift_date >= today;
