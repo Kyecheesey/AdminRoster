@@ -86,7 +86,7 @@ function ShiftEditor({ meta, template, availability, initial, onClose, onSaved, 
       ? api("/admin/template", { method: "PUT", body: { ...payload, id: f.id } })
       : api("/admin/template", { method: "POST", body: payload });
     req
-      .then(() => { notify(f.id ? "Shift updated." : "Shift added to the roster.", "success"); onSaved(); })
+      .then(() => { notify(f.id ? "Shift updated." : "Shift added to the roster.", "success"); onSaved(payload); })
       .catch((e) => notify(e.message, "error"))
       .finally(() => setBusy(false));
   };
@@ -204,6 +204,9 @@ export default function Admin({ me, notify, onLogout }) {
   const [weekEnding, setWeekEnding] = useState(weekEndingIso()); // Sunday the roster is built to
   const [rosterView, setRosterView] = useState("timeline"); // "timeline" | "cards"
   const [copy, setCopy] = useState({ from: 0, to: 1 }); // copy-a-day source/target
+  // Building a week means adding many near-identical shifts, so carry the last
+  // location and role forward instead of asking for them every single time.
+  const [lastUsed, setLastUsed] = useState({ location_id: "", role_id: "" });
   const weekStart = addDays(weekEnding, -6); // Monday of the selected week
 
   const loadOrgs = () => {
@@ -284,13 +287,23 @@ export default function Admin({ me, notify, onLogout }) {
       .finally(() => { setBusy(false); load(); });
   };
 
-  const openNew = (dow = 0) => setEditing({ ...blankShift, day_of_week: dow });
+  const openNew = (dow = 0) =>
+    setEditing({
+      ...blankShift,
+      day_of_week: dow,
+      location_id: lastUsed.location_id || meta?.locations?.[0]?.id || "",
+      role_id: lastUsed.role_id || meta?.roles?.[0]?.id || "",
+    });
   const openEdit = (t) => setEditing({
     id: t.id, staff_id: t.staff_id, day_of_week: t.day_of_week,
     start_time: hm(t.start_time), end_time: hm(t.end_time),
     location_id: t.location_id, role_id: t.role_id,
   });
-  const onSaved = () => { setEditing(null); load(); };
+  const onSaved = (used) => {
+    if (used?.location_id) setLastUsed({ location_id: used.location_id, role_id: used.role_id });
+    setEditing(null);
+    load();
+  };
 
   const applyFromWeek = () => {
     const start = weekStart < todayIso() ? todayIso() : weekStart;
