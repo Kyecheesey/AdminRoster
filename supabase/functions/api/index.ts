@@ -213,6 +213,50 @@ async function ensureInstances(orgId: string, start: string, end: string) {
   }
 }
 
+/* ---------- calendar feed (.ics) ----------
+ * Read-only iCalendar so staff can subscribe from Google, Apple or Outlook.
+ * Deliberately a subscription rather than a Google API integration: no OAuth,
+ * no per-provider work, and the roster stays the single source of truth.
+ */
+
+// RFC5545 wants CRLF, escaped separators, and lines folded at 75 octets.
+function icsLine(name: string, value: string): string {
+  const escaped = String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+  const line = `${name}:${escaped}`;
+  // fold: continuation lines begin with a single space
+  const out: string[] = [];
+  let rest = line;
+  while (rest.length > 74) {
+    out.push(rest.slice(0, 74));
+    rest = " " + rest.slice(74);
+  }
+  out.push(rest);
+  return out.join("\r\n");
+}
+
+const icsStamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+// "2026-07-31" + "08:00:00" -> "20260731T080000" (local wall clock, TZID-qualified)
+const icsLocal = (date: string, time: string) =>
+  `${date.replace(/-/g, "")}T${time.slice(0, 8).replace(/:/g, "")}`;
+
+// Queensland has no daylight saving, so a single STANDARD component is exact
+// and stable. Other zones would need their own VTIMEZONE before being offered.
+const BRISBANE_VTIMEZONE = [
+  "BEGIN:VTIMEZONE",
+  "TZID:Australia/Brisbane",
+  "BEGIN:STANDARD",
+  "DTSTART:19700101T000000",
+  "TZOFFSETFROM:+1000",
+  "TZOFFSETTO:+1000",
+  "TZNAME:AEST",
+  "END:STANDARD",
+  "END:VTIMEZONE",
+];
+
 const FREQUENCIES = ["once", "daily", "weekly", "fortnightly", "monthly_date", "monthly_weekday"];
 const isDate = (s: unknown) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
@@ -290,6 +334,83 @@ Deno.serve(async (req: Request) => {
       return json({ org: data });
     }
 
+    // A calendar client cannot send our session header, so this one route
+    // authorises on the token in the URL. It returns only that person's own
+    // shifts, and nothing about anybody else.
+    if (path === "/calendar.ics" && req.method === "GET") {
+      const token = url.searchParams.get("token") ?? "";
+      if (!/^[0-9a-f-]{36}$/i.test(token)) {
+        return new Response("Invalid calendar link", { status: 400, headers: CORS });
+      }
+      const { data: staff } = await supabase
+        .from("staff")
+        .select("id, name, active, org:organisations(name, timezone)")
+        .eq("calendar_token", token)
+        .maybeSingle();
+      if (!staff || !staff.active) {
+        return new Response("Calendar link not recognised", { status: 404, headers: CORS });
+      }
+
+      // a window either side of today: enough history to be useful, enough
+      // ahead to be worth subscribing to, without an unbounded feed
+      const from = new Date(); from.setUTCDate(from.getUTCDate() - 30);
+      const to = new Date(); to.setUTCDate(to.getUTCDate() + 180);
+      const start = from.toISOString().slice(0, 10);
+      const end = to.toISOString().slice(0, 10);
+
+      const { data: shifts, error } = await supabase
+        .from("shift_instances")
+        .select("id, shift_date, start_time, end_time, status, location:locations(name), role:roles(name)")
+        .eq("staff_id", staff.id)
+        .gte("shift_date", start).lte("shift_date", end)
+        .neq("status", "cancelled")
+        .order("shift_date");
+      if (error) throw error;
+
+      const now = icsStamp(new Date());
+      const orgName = (staff.org as { name?: string } | null)?.name ?? "Roster";
+      const lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//RosterME//Staff roster//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        icsLine("X-WR-CALNAME", `${orgName} — ${staff.name}`),
+        icsLine("X-WR-CALDESC", "Your shifts. Managed in RosterME; changes appear here automatically."),
+        // a hint to clients that poll; Google still uses its own schedule
+        "X-PUBLISHED-TTL:PT1H",
+        "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
+        ...BRISBANE_VTIMEZONE,
+      ];
+
+      for (const s of shifts ?? []) {
+        const loc = (s.location as { name?: string } | null)?.name ?? "";
+        const role = (s.role as { name?: string } | null)?.name ?? "";
+        lines.push(
+          "BEGIN:VEVENT",
+          icsLine("UID", `${s.id}@rosterme`),
+          `DTSTAMP:${now}`,
+          `DTSTART;TZID=Australia/Brisbane:${icsLocal(s.shift_date, s.start_time)}`,
+          `DTEND;TZID=Australia/Brisbane:${icsLocal(s.shift_date, s.end_time)}`,
+          icsLine("SUMMARY", role ? `${role} — ${loc}` : `Shift — ${loc}`),
+          icsLine("LOCATION", loc),
+          icsLine("DESCRIPTION", `${role}${loc ? ` at ${loc}` : ""}${s.status === "swapped" ? " (swapped in)" : ""}`),
+          "TRANSP:OPAQUE",
+          "END:VEVENT",
+        );
+      }
+      lines.push("END:VCALENDAR");
+
+      return new Response(lines.join("\r\n") + "\r\n", {
+        headers: {
+          ...CORS,
+          "Content-Type": "text/calendar; charset=utf-8",
+          "Content-Disposition": `inline; filename="roster.ics"`,
+          "Cache-Control": "public, max-age=900",
+        },
+      });
+    }
+
     if (path === "/bootstrap" && req.method === "GET") {
       const org = await resolveOrg(url);
       if (!org) return json({ error: "Unknown workplace" }, 404);
@@ -331,6 +452,22 @@ Deno.serve(async (req: Request) => {
 
     if (path === "/me" && req.method === "GET") {
       return json({ staff: { id: me.sid, name: me.name, isAdmin: me.adm, isPlatformAdmin: me.padm } });
+    }
+
+    if (path === "/calendar-token" && req.method === "GET") {
+      const { data, error } = await supabase
+        .from("staff").select("calendar_token").eq("id", me.sid).single();
+      if (error) throw error;
+      return json({ token: data.calendar_token });
+    }
+
+    // rotating the token immediately breaks every previously shared link
+    if (path === "/calendar-token/reset" && req.method === "POST") {
+      const token = crypto.randomUUID();
+      const { error } = await supabase.from("staff")
+        .update({ calendar_token: token }).eq("id", me.sid);
+      if (error) throw error;
+      return json({ token });
     }
 
     if (path === "/change-pin" && req.method === "POST") {
@@ -415,11 +552,12 @@ Deno.serve(async (req: Request) => {
     if (path === "/unavailability" && req.method === "POST") {
       const target = me.adm && body.staffId ? body.staffId : me.sid;
       const { start_date, end_date, note } = body;
-      // admins entering time off approve it outright; staff requests await review
-      const row = me.adm
-        ? { staff_id: target, org_id: me.oid, start_date, end_date, note, status: "approved", reviewed_by: me.sid, reviewed_at: new Date().toISOString() }
-        : { staff_id: target, org_id: me.oid, start_date, end_date, note, status: "pending" };
-      const { error } = await supabase.from("unavailability").insert(row);
+      // Everyone's time off waits for a review, admins included. Self-approval
+      // meant a manager's own leave never appeared in anyone's queue and was on
+      // the roster the moment they typed it.
+      const { error } = await supabase.from("unavailability").insert({
+        staff_id: target, org_id: me.oid, start_date, end_date, note, status: "pending",
+      });
       if (error) throw error;
       return json({ ok: true });
     }

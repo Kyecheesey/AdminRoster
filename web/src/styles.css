@@ -194,44 +194,12 @@ button { font-family: inherit; color: inherit; }
   }
 }
 
-/* ================= hero (brand top area) ================= */
-.hero {
-  background: var(--brand-grad);
-  color: #fff;
-  padding: 10px 16px 30px;
-  position: relative;
-  /* the decorative glow below is deliberately positioned outside the box;
-     clip it, or it drags a 70px horizontal scrollbar onto every phone */
-  overflow: hidden;
-}
-.hero::after {
-  content: "";
-  position: absolute;
-  right: -70px; top: -80px;
-  width: 230px; height: 230px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 70%);
-  pointer-events: none;
-}
-
-.sheet {
-  background: var(--bg);
-  border-radius: 26px 26px 0 0;
-  margin-top: -22px;
-  position: relative;
-  z-index: 2;
-  flex: 1;
-  padding: 18px 16px 30px;
-  animation: sheet-up 0.32s var(--ease) both;
-}
-
 /* ================= headers ================= */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 2px 12px;
 }
 .topbar h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; }
-.hero .topbar h1 { color: #fff; }
 .topbar .link-btn {
   color: var(--brand); font-weight: 700; background: none; border: none;
   font-size: 15px; cursor: pointer; padding: 10px 12px; border-radius: var(--r-sm);
@@ -243,8 +211,6 @@ button { font-family: inherit; color: inherit; }
    thing on the page. */
 .topbar .link-btn.muted { color: var(--muted); font-weight: 600; }
 .topbar .link-btn.muted:hover { background: var(--wash); color: var(--text-soft); }
-.hero .topbar .link-btn { color: var(--accent); }
-.hero .topbar .link-btn:hover { background: rgba(255,255,255,0.14); }
 .page-head { padding: 18px 18px 12px; }
 .page-head h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 .page-head .sub { color: var(--muted); font-size: 14px; margin-top: 3px; }
@@ -507,26 +473,64 @@ button { font-family: inherit; color: inherit; }
   display: flex; align-items: center; justify-content: center;
 }
 
-/* ================= day header ================= */
-.greet-bar { align-items: flex-start; gap: 12px; padding: 14px 2px 14px; }
-.greet h1 { font-size: 23px; font-weight: 800; letter-spacing: -0.5px; color: #fff; line-height: 1.15; }
-.greet-date { color: rgba(255,255,255,0.78); font-size: 13.5px; font-weight: 600; margin-top: 3px; }
-.greet-side { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+/* ==========================================================================
+   Dashboard (the calendar page)
+
+   This is the front door, so it is laid out like a dashboard rather than a
+   month view with extras bolted on. The month sits on the left as a picker;
+   the wider right-hand column carries the thing people actually opened the
+   app for — what they are working, and when. The month used to be a big
+   dark brand panel, which made the picker heavier than the roster it was
+   there to control; it is now a quiet white card like everything else.
+   ========================================================================== */
+.dash { flex: 1; padding: 0 16px 30px; animation: fade-up 0.28s ease both; }
+
+.dash-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; padding: 18px 2px 14px;
+}
+.greet h1 { font-size: 23px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.15; }
+.greet-date { color: var(--muted); font-size: 13.5px; font-weight: 600; margin-top: 3px; }
+.greet-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.dash-head .link-btn {
+  color: var(--brand); background: var(--brand-soft); border: none;
+  font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  padding: 0 16px; min-height: 40px; border-radius: var(--r-pill);
+  display: inline-flex; align-items: center;
+  transition: background 0.15s, transform 0.1s;
+}
+.dash-head .link-btn:hover { background: #d6eae4; }
+.dash-head .link-btn:active { transform: scale(0.96); }
 
 .weather {
   display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.16);
-  color: #fff; padding: 7px 11px; border-radius: var(--r-pill);
+  background: var(--card); border: 1px solid var(--line);
+  color: var(--text-soft); padding: 0 13px; min-height: 40px; border-radius: var(--r-pill);
   font-size: 13px; font-weight: 700; white-space: nowrap;
+  box-shadow: var(--shadow-xs);
   animation: fade-in 0.4s ease both;
 }
-.weather .wt { font-variant-numeric: tabular-nums; }
-.weather .wl { color: rgba(255,255,255,0.72); font-weight: 600; font-size: 12px; }
+.weather .wt { font-variant-numeric: tabular-nums; color: var(--text); }
+.weather .wl { color: var(--muted); font-weight: 600; font-size: 12px; }
+
+/* --- the two columns --- */
+.dash-cols { display: grid; gap: 14px; align-items: start; }
+/* On a single column the wrappers dissolve, so cards can be ordered by what
+   matters most rather than by which desktop column they happen to live in. */
+.dash-col { display: contents; }
+.dash-lead  { order: 1; }
+.cal-card   { order: 2; }
+.day-card   { order: 3; }
+.tile-row   { order: 4; }
+.soon-card  { order: 5; }
+.quote-card { order: 6; }
+
+.dash-lead { display: flex; flex-direction: column; gap: 12px; }
 
 /* ---- up next: the answer to "am I working?" ---- */
 .upnext {
-  background: var(--card); border-radius: var(--r-lg); padding: 16px 17px;
-  box-shadow: var(--shadow-card); margin-bottom: 12px;
+  background: var(--card); border-radius: var(--r-lg); padding: 18px 20px;
+  box-shadow: var(--shadow-card);
   display: flex; flex-direction: column; gap: 3px;
   border-left: 4px solid var(--brand);
   animation: fade-up 0.3s ease both;
@@ -538,12 +542,12 @@ button { font-family: inherit; color: inherit; }
   font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px;
   color: var(--muted);
 }
-.upnext strong { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
-.upnext.none strong { font-size: 17px; color: var(--text-soft); }
-.un-when { font-size: 13.5px; font-weight: 700; color: var(--brand-deep); }
+.upnext strong { font-size: 26px; font-weight: 800; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; }
+.upnext.none strong { font-size: 18px; color: var(--text-soft); }
+.un-when { font-size: 14px; font-weight: 700; color: var(--brand-deep); }
 .upnext.live .un-when { color: var(--green-ink); }
 .un-sub, .un-meta { font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.un-meta { display: flex; align-items: center; gap: 5px; margin-top: 5px; }
+.un-meta { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
 
 /* a slow pulse, so "on now" reads as live without demanding attention */
 .pulse {
@@ -556,63 +560,160 @@ button { font-family: inherit; color: inherit; }
   100% { box-shadow: 0 0 0 0 rgba(47, 162, 98, 0); }
 }
 
-/* ---- quote of the day ---- */
-.quote {
-  margin: 6px 0 4px; padding: 16px 18px;
-  background: var(--brand-tint); border-radius: var(--r-lg);
-  animation: fade-up 0.35s 0.1s ease both;
-}
+/* ---- quote of the day ----
+   Boxed like everything else. Floating loose on the background it read as a
+   stray paragraph somebody forgot to delete. */
+.quote-card .quote { margin: 0; padding: 0; background: none; }
+.quote { animation: fade-up 0.35s 0.1s ease both; }
 .quote blockquote {
-  font-size: 15px; line-height: 1.5; color: var(--brand-dark);
+  font-size: 15px; line-height: 1.55; color: var(--brand-dark);
   font-family: Georgia, "Times New Roman", serif; font-style: italic;
 }
 .quote figcaption {
-  margin-top: 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.4px;
+  margin-top: 9px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.4px;
   text-transform: uppercase; color: var(--brand);
 }
 
-@media (min-width: 920px) {
-  .greet h1 { font-size: 25px; }
-}
-
-/* ================= calendar ================= */
+/* ================= month picker ================= */
+.cal-card { padding: 16px 15px 8px; }
 .cal-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 2px 2px 12px;
+  padding: 0 2px 12px;
 }
-.cal-head .month { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
+.cal-head .month { font-size: 16.5px; font-weight: 800; letter-spacing: -0.3px; }
 .cal-head .nav-btn {
-  background: rgba(255,255,255,0.13); border: none; color: #fff;
-  width: 36px; height: 36px; border-radius: 12px; cursor: pointer;
+  background: var(--wash); border: none; color: var(--text-soft);
+  width: 34px; height: 34px; border-radius: 11px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
 }
-.cal-head .nav-btn:hover { background: rgba(255,255,255,0.22); }
-.cal-head .nav-btn:active { transform: scale(0.92); background: rgba(255,255,255,0.26); }
+.cal-head .nav-btn:hover { background: var(--brand-soft); color: var(--brand); }
+.cal-head .nav-btn:active { transform: scale(0.92); }
 
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; text-align: center; }
-.cal-grid .dow { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.55); padding-bottom: 8px; letter-spacing: 0.6px; }
+.cal-grid .dow {
+  font-size: 10.5px; font-weight: 800; color: var(--faint);
+  padding-bottom: 7px; letter-spacing: 0.6px;
+}
 .cal-cell {
-  position: relative; height: 46px;
+  position: relative; height: 44px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: none; border: none; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+  background: none; border: none; border-radius: 12px;
+  color: var(--text-soft); font-size: 14.5px; font-weight: 600; cursor: pointer;
 }
-.cal-cell.out { color: rgba(255,255,255,0.32); font-weight: 500; }
+.cal-cell.out { color: var(--faint); font-weight: 500; }
 .cal-cell .num {
-  width: 35px; height: 35px; border-radius: 50%;
+  width: 33px; height: 33px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, color 0.15s, transform 0.12s;
+  transition: background 0.15s, color 0.15s, transform 0.12s, box-shadow 0.15s;
 }
-.cal-cell:hover .num { background: rgba(255,255,255,0.14); }
+.cal-cell:hover .num { background: var(--wash); }
 .cal-cell:active .num { transform: scale(0.9); }
-.cal-cell.selected .num { background: #fff; color: var(--brand); font-weight: 800; box-shadow: 0 3px 10px rgba(0,0,0,0.25); }
-.cal-cell.selected:hover .num { background: #fff; }
-.cal-cell.today .num { color: var(--accent); font-weight: 800; }
-.cal-cell.today.selected .num { color: var(--brand); }
-.dots { position: absolute; bottom: 3px; display: flex; gap: 3px; }
+.cal-cell.today .num { color: var(--brand); font-weight: 800; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.cal-cell.selected .num,
+.cal-cell.selected:hover .num {
+  background: var(--brand); color: #fff; font-weight: 800;
+  box-shadow: 0 3px 10px rgba(12, 127, 104, 0.3);
+}
+.dots { position: absolute; bottom: 4px; display: flex; gap: 3px; }
 .dots i { width: 5px; height: 5px; border-radius: 50%; }
-.dots .mine { background: var(--dot-mine); }
-.dots .team { background: rgba(255,255,255,0.45); }
+.dots .mine { background: var(--brand); }
+.dots .team { background: var(--line-strong); }
+
+.cal-legend {
+  display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+  margin-top: 8px; padding: 10px 0 6px; border-top: 1px solid var(--line);
+  font-size: 11.5px; font-weight: 700; color: var(--muted);
+}
+.cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cal-legend i { width: 7px; height: 7px; border-radius: 50%; }
+.cal-legend .mine { background: var(--brand); }
+.cal-legend .team { background: var(--line-strong); }
+
+/* ================= the selected day ================= */
+.day-card { padding: 16px; }
+.day-card-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-bottom: 13px;
+}
+.day-card-head h2 { font-size: 21px; font-weight: 800; letter-spacing: -0.5px; }
+.day-card-head .link-btn {
+  background: none; border: none; font-family: inherit; cursor: pointer;
+  color: var(--brand); font-size: 13px; font-weight: 700;
+  padding: 6px 9px; border-radius: var(--r-xs); white-space: nowrap;
+  transition: background 0.15s;
+}
+.day-card-head .link-btn:hover { background: var(--brand-soft); }
+
+/* Cards inside a card: the outer one already supplies the elevation, so
+   these get a hairline instead of a second shadow. */
+.day-card .shift-card { box-shadow: none; border: 1px solid var(--line); }
+.day-card .shift-card:last-child { margin-bottom: 0; }
+
+.away-note {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--red-soft); color: var(--red-ink);
+  border-radius: var(--r-sm); padding: 10px 12px; margin: 12px 0 4px;
+  font-size: 12.5px; font-weight: 700;
+}
+
+.day-empty-state {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 7px; padding: 26px 16px 22px;
+}
+.day-empty-state .de-ic {
+  width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); color: var(--brand); margin-bottom: 3px;
+}
+.day-empty-state strong { font-size: 16px; font-weight: 800; letter-spacing: -0.2px; }
+.day-empty-state p { font-size: 13.5px; font-weight: 600; color: var(--muted); line-height: 1.5; max-width: 34ch; }
+.day-empty-state .btn { margin-top: 5px; }
+
+/* ================= coming up ================= */
+.soon-card { padding: 16px; }
+.up-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: left; cursor: pointer;
+  background: none; border: none; border-radius: var(--r-sm);
+  padding: 10px 10px; font-family: inherit;
+  transition: background 0.15s;
+}
+.up-row + .up-row { border-top: 1px solid var(--line); border-radius: 0; }
+.up-row:hover { background: var(--wash); }
+.up-row.on { background: var(--brand-soft); }
+.ur-day { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ur-day b { font-size: 13.5px; font-weight: 800; letter-spacing: -0.1px; }
+.ur-day span { font-size: 12px; font-weight: 600; color: var(--muted); }
+.ur-time {
+  font-size: 13px; font-weight: 700; color: var(--text-soft);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.side-empty, .side-more {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  padding: 6px 2px 2px; line-height: 1.5;
+}
+.side-more { padding-top: 10px; }
+
+/* ================= shortcut tiles ================= */
+.tile-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.tile {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 15px 16px; border: none; cursor: pointer; font-family: inherit;
+  transition: box-shadow 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.tile .tile-ic {
+  width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); color: var(--brand);
+}
+.tile .tile-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tile .tile-txt strong { font-size: 14px; font-weight: 800; letter-spacing: -0.1px; }
+.tile .tile-txt span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.tile > svg { color: var(--faint); flex-shrink: 0; }
+.tile:hover { box-shadow: var(--shadow-lift); }
+.tile:hover > svg { color: var(--brand); }
+.tile:active { transform: scale(0.99); }
 
 /* segmented control */
 .seg {
@@ -627,10 +728,6 @@ button { font-family: inherit; color: inherit; }
 .seg button:hover { color: var(--text-soft); }
 .seg button.active { background: #fff; color: var(--text); box-shadow: var(--shadow-xs); }
 
-.day-title {
-  font-size: 14px; font-weight: 800; margin: 16px 2px 10px;
-  color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px;
-}
 
 /* ================= shift cards ================= */
 .shift-card {
@@ -851,6 +948,52 @@ select { cursor: pointer; }
 .switch input:checked + .track { background: var(--green); }
 .switch input:checked + .track::after { transform: translateX(20px); }
 .switch input:focus-visible + .track { box-shadow: var(--ring); }
+
+/* ================= calendar sync ================= */
+.sync-lede { font-size: 13.5px; font-weight: 600; color: var(--muted); line-height: 1.45; margin-bottom: 12px; }
+
+.sync-url { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+.sync-url input {
+  flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--wash); color: var(--text-soft);
+}
+.sync-url .btn { flex-shrink: 0; }
+
+.sync-steps { list-style: none; display: flex; flex-direction: column; gap: 11px; margin: 0 0 14px; }
+.sync-steps li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.45; font-weight: 600; color: var(--text-soft); }
+.sync-steps .step-n {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand-deep);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 800;
+}
+.sync-steps strong { color: var(--text); font-weight: 800; }
+.sync-steps b { font-weight: 800; }
+
+/* the refresh caveat is a real limitation, so it gets real prominence */
+.sync-note {
+  display: flex; gap: 9px; align-items: flex-start;
+  background: var(--yellow-soft); border-radius: var(--r-sm);
+  padding: 11px 12px; margin-bottom: 12px;
+  font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--yellow-ink);
+}
+.sync-note svg { flex-shrink: 0; margin-top: 1px; }
+
+.sync-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  border-top: 1px solid var(--line); padding-top: 12px;
+}
+.sync-foot span {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 700; color: var(--faint);
+}
+.link-reset {
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  font-size: 12.5px; font-weight: 700; color: var(--muted);
+  padding: 6px 8px; border-radius: var(--r-xs);
+}
+.link-reset:hover { color: var(--red-ink); background: var(--red-soft); }
 
 /* ================= offers ================= */
 .offer-card {
@@ -1302,7 +1445,6 @@ select { cursor: pointer; }
 .sidenav { display: none; }
 .main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .cards-grid { display: block; }
-.cal-wrap { display: contents; }
 .av-grid { display: block; }
 
 /* ================= desktop (>= 920px) ================= */
@@ -1348,8 +1490,9 @@ select { cursor: pointer; }
   }
   .side-brand .brand-platform b { color: var(--accent); font-weight: 800; }
   .side-brand.branded { flex-direction: column; align-items: stretch; gap: 8px; padding: 2px 6px 22px; }
+  /* The clinic's mark, not a billboard. It was taking a sixth of the sidebar. */
   .side-brand.branded .org-logo-tile {
-    background: #fff; border-radius: 13px; padding: 14px 15px;
+    background: #fff; border-radius: 12px; padding: 10px 13px;
     box-shadow: 0 4px 14px rgba(0,0,0,0.22);
   }
   .side-brand.branded .brand-platform { text-align: center; }
@@ -1373,45 +1516,32 @@ select { cursor: pointer; }
   }
   .side-install:hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.5); }
   .side-user {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 10px 0; border-top: 1px solid rgba(255,255,255,0.14);
+    display: flex; align-items: center; gap: 11px;
+    padding: 14px 8px 2px; border-top: 1px solid rgba(255,255,255,0.14);
   }
-  .side-user .who .nm { font-size: 13.5px; font-weight: 800; }
+  .side-user .who { min-width: 0; }
+  .side-user .who .nm { font-size: 14px; font-weight: 800; margin-bottom: 2px; }
+  /* These were 12px and untappable. They are the only way to change a PIN or
+     get out of the app, so they get a real hit area. */
   .side-user .who button {
-    background: none; border: none; color: #9fccbe; font-size: 12px; font-weight: 700;
-    cursor: pointer; padding: 2px 0 0;
+    background: none; border: none; color: #b6dccd; font-size: 13px; font-weight: 700;
+    cursor: pointer; padding: 5px 7px; margin-left: -7px; border-radius: 8px;
+    transition: background 0.15s, color 0.15s;
   }
-  .side-user .who button:hover { color: #fff; }
-
-  /* --- calendar: two columns --- */
-  .cal-wrap {
-    display: grid;
-    grid-template-columns: 420px minmax(0, 1fr);
-    gap: 26px;
-    padding: 26px 30px 40px;
-    align-items: start;
-  }
-  .cal-wrap .hero {
-    border-radius: 22px;
-    padding: 6px 18px 22px;
-    position: sticky; top: 26px;
-    box-shadow: var(--shadow-float);
-  }
-  .cal-wrap .sheet {
-    margin-top: 0;
-    padding: 0;
-    border-radius: 0;
-    background: transparent;
-    animation: fade-up 0.28s ease both;
-  }
-  .cal-wrap .sheet .stat-strip.two { margin-top: 0; }
+  .side-user .who button:hover { color: #fff; background: rgba(255,255,255,0.12); }
 
   /* --- generic pages --- */
-  /* Cap the measure. Past ~1200px a roster stretches into unreadable ribbons
-     and the eye loses the row it was on. */
-  .plain-page { padding: 26px 30px 44px; max-width: 1240px; }
-  .cal-wrap { max-width: 1240px; }
+  /* Cap the measure and centre it. Past ~1300px a roster stretches into
+     unreadable ribbons and the eye loses the row it was on; left-aligned in a
+     wide window it looked like a phone layout pinned to one edge. */
+  .plain-page { padding: 26px 30px 44px; max-width: 1320px; margin: 0 auto; width: 100%; }
   .plain-page .topbar h1 { font-size: 28px; }
+  .dash { padding: 26px 30px 44px; max-width: 1320px; margin: 0 auto; width: 100%; }
+  .dash-head { padding: 0 4px 20px; }
+  .greet h1 { font-size: 27px; }
+  .upnext { padding: 21px 24px; }
+  .upnext strong { font-size: 29px; }
+  .plain-page .stat-strip { max-width: 560px; }
 
   .cards-grid {
     display: grid;
@@ -1428,8 +1558,6 @@ select { cursor: pointer; }
     align-items: start;
   }
 
-  .stat-strip { max-width: 560px; }
-
   .modal-back { align-items: center; }
   .modal { border-radius: var(--r-xl); max-width: 520px; }
   .modal .grab { display: none; }
@@ -1438,6 +1566,30 @@ select { cursor: pointer; }
 
   .sec-nav { top: 0; padding-top: 6px; }
   .sec-anchor { scroll-margin-top: 20px; }
+}
+
+/* ================= wide screens: the dashboard splits =================
+   Only once there is genuinely room for both. Below this the month grid gets
+   squeezed narrower than its own date circles and the roster loses the width
+   it needs, so a single column is the better layout, not a fallback. */
+@media (min-width: 1120px) {
+  .dash-cols {
+    /* The month is a picker; the roster is the point. Weight them that way. */
+    grid-template-columns: minmax(0, 37fr) minmax(0, 63fr);
+    gap: 18px;
+  }
+  /* Real columns again, so "Up next" starts level with the top of the month. */
+  .dash-col { display: flex; flex-direction: column; gap: 18px; }
+  .cal-card { padding: 20px 18px 10px; }
+  .cal-cell { height: 48px; }
+  .soon-card, .quote-card { padding: 20px; }
+  .day-card { padding: 20px 22px; min-height: 260px; }
+  .day-card-head h2 { font-size: 24px; }
+  .tile-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+  .dash-lead { gap: 14px; }
+  .stat-strip.two { margin: 0; }
+  .stat { padding: 16px 18px; }
+  .stat .v { font-size: 26px; }
 }
 
 /* ================= pointer-only polish =================

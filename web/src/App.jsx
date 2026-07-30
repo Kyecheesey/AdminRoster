@@ -254,7 +254,7 @@ export default function App() {
       </header>
 
       <main className="main">
-        {tab === "calendar" && <Calendar me={session.staff} notify={notify} />}
+        {tab === "calendar" && <Calendar me={session.staff} notify={notify} onNavigate={setTab} />}
         {tab === "availability" && <Availability me={session.staff} notify={notify} />}
         {tab === "offers" && <Offers me={session.staff} notify={notify} />}
         {tab === "admin" && session.staff.isAdmin && (

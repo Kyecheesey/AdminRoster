@@ -133,6 +133,12 @@ async function handle(route) {
     state.unavailability = state.unavailability.filter((u) => u.id !== url.searchParams.get("id"));
     return reply({ ok: true });
   }
+  if (p === "/calendar-token" && method === "GET")
+    return reply({ token: "11111111-2222-3333-4444-555555555555" });
+  if (p === "/calendar-token/reset" && method === "POST") {
+    state.calendarToken = "99999999-8888-7777-6666-555555555555";
+    return reply({ token: state.calendarToken });
+  }
   if (p === "/meta") return reply({
     locations: [{ id: "l1", name: "Hope Island" }, { id: "l2", name: "Upper Coomera" }],
     roles: [{ id: "r1", name: "Centre Admin" }, { id: "r2", name: "Mood Admin" }],
@@ -210,7 +216,7 @@ check("offer created via calendar", state.offers.some((o) => o.shift_instance_id
 // 3. month navigation
 await page.getByLabel("Next month").click();
 await page.waitForTimeout(400);
-await page.getByRole("button", { name: "Today" }).click();
+await page.getByRole("button", { name: "Today", exact: true }).click();
 await page.waitForTimeout(400);
 
 // 4. offers: accept Debbie's open offer, then approve it (we're admin)
@@ -249,12 +255,29 @@ check("availability saved (Sat on)", state.availability.find((a) => a.day_of_wee
 await page.locator('input[type="date"]').first().fill(tmrIso);
 await page.locator('input[type="date"]').nth(1).fill(tmrIso);
 await page.getByLabel("Reason (optional)").fill("dentist");
-await page.getByRole("button", { name: "Add time off" }).click();
+await page.getByRole("button", { name: "Request time off" }).click();
 await page.waitForTimeout(500);
 check("time off added", state.unavailability.filter((u) => u.staff_id === "s3").length === 1);
+check(
+  "an admin's own time off still waits for review",
+  state.unavailability.find((u) => u.staff_id === "s3")?.status === "pending",
+);
 await page.getByRole("button", { name: "Remove" }).first().click();
 await page.waitForTimeout(400);
 check("time off removed", state.unavailability.filter((u) => u.staff_id === "s3").length === 0);
+
+// 8b. calendar subscription feed is offered on the availability page
+check("calendar sync card is shown", await page.locator(".sync-url input").isVisible());
+check(
+  "feed link carries the private token",
+  (await page.locator(".sync-url input").inputValue()).includes(
+    "/calendar.ics?token=11111111-2222-3333-4444-555555555555",
+  ),
+);
+check(
+  "refresh-timing caveat is stated, not buried",
+  await page.locator(".sync-note").isVisible(),
+);
 
 // 9. admin: add a shift via the editor modal
 await page.getByRole("button", { name: "Admin" }).click();
@@ -391,8 +414,8 @@ check("change PIN round-trips", state.changedPin === "5678");
 // 11. away chip: Debbie has time off today; her shift should be flagged
 state.unavailability.push({ id: "u9", staff_id: "s4", start_date: todayIso, end_date: todayIso, note: "sick", status: "approved" });
 state.shifts.find((s) => s.id === "sh2").staff_id = "s4"; // restore Debbie on today's shift
-await page.getByRole("button", { name: "Today" }).click();
-await page.getByRole("button", { name: "Everyone" }).click();
+await page.getByRole("button", { name: "Today", exact: true }).click();
+await page.getByRole("button", { name: "Team roster" }).click();
 await page.waitForTimeout(600);
 check("away shift flagged as needing cover", await page.getByText("Away — needs cover").first().isVisible());
 

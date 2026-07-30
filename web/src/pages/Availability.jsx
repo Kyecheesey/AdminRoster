@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { DAY_NAMES, DAY_SHORT, fmtDate } from "../util.js";
 import { PlaneIcon, PalmIcon } from "../components/Icons.jsx";
+import CalendarSync from "../components/CalendarSync.jsx";
 
 const blankWeek = () =>
   DAY_NAMES.map((_, i) => ({
@@ -67,7 +68,7 @@ export default function Availability({ me, notify }) {
     if (form.end_date < form.start_date) return notify("End date is before start date.", "error");
     api("/unavailability", { method: "POST", body: form })
       .then(() => {
-        notify(me.isAdmin ? "Time off added." : "Time off requested — awaiting approval.", "success");
+        notify("Time off requested — an admin will review it.", "success");
         setForm({ start_date: "", end_date: "", note: "" });
         load();
       })
@@ -139,7 +140,7 @@ export default function Availability({ me, notify }) {
           <p className="empty" style={{ padding: "10px 0 4px" }}>
             <span className="big"><PalmIcon size={26} /></span>
             <strong>No time off booked</strong>
-            Add dates below and {me.isAdmin ? "they'll go straight on the roster." : "your manager will review them."}
+            Add dates below. Requests are reviewed before they go on the roster.
           </p>
         )}
         {timeOff.map((u) => (
@@ -180,13 +181,13 @@ export default function Availability({ me, notify }) {
             />
           </div>
           <div className="full">
-            <button className="btn" onClick={addTimeOff}>
-              {me.isAdmin ? "Add time off" : "Request time off"}
-            </button>
+            <button className="btn" onClick={addTimeOff}>Request time off</button>
           </div>
         </div>
       </div>
       </div>
+
+      <CalendarSync notify={notify} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-const BASE = "https://qozhbbkylgwbhhlcjako.supabase.co/functions/v1/api";
+export const BASE = "https://qozhbbkylgwbhhlcjako.supabase.co/functions/v1/api";
 
 export function getSession() {
   try {
