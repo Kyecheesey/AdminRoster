@@ -1,33 +1,56 @@
-/* Render the rostering policy to PDF.
+/* Render the clinic's RosterME documents to PDF.
  *
- * Chromium rather than a PDF library: the document is mostly tables, and
- * getting column widths, page-break behaviour and typography right in
+ * Chromium rather than a PDF library: these are mostly tables and screenshots,
+ * and getting column widths, image scaling and page-break behaviour right in
  * reportlab costs far more than writing the CSS. Uses the same headless
  * browser already installed for the UI tests.
  *
- *   cd web && node build-policy-pdf.mjs
+ *   cd web && node build-doc-pdf.mjs [policy|guide|all]
  *
- * Lives in web/ because that is where playwright is installed; it writes to
- * ../docs/ beside the markdown it renders.
+ * Markdown stays the source of truth; the PDFs are regenerated from it, so the
+ * two cannot drift. Lives in web/ because that is where playwright is
+ * installed; it writes to ../docs/ beside the markdown it renders.
  */
 import { chromium } from "playwright-core";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { basename, extname } from "node:path";
 
-const OUT = process.argv[2] ?? new URL("../docs/RosterME-policy-and-procedure.pdf", import.meta.url).pathname;
-const SRC = new URL("../docs/RosterME-policy-and-procedure.md", import.meta.url).pathname;
 const CHROME = process.env.CHROME_PATH ?? "/opt/pw-browsers/chromium";
+const docs = (f) => new URL(`../docs/${f}`, import.meta.url).pathname;
+
+const DOCS = {
+  policy: {
+    src: docs("RosterME-policy-and-procedure.md"),
+    out: docs("RosterME-policy-and-procedure.pdf"),
+    title: "Staff Rostering System (RosterME)",
+    sub: "Access, Administration and Use &middot; Policy and Procedure",
+    bodyFrom: "## 1.",
+    footer: "RosterME — Policy and Procedure &middot; v1.0 &middot; Effective 31 July 2026",
+  },
+  guide: {
+    src: docs("RosterME-how-to-guide.md"),
+    out: docs("RosterME-how-to-guide.pdf"),
+    title: "RosterME — How to use it",
+    sub: "User guide &middot; Part A for all staff, Part B for administrators",
+    bodyFrom: "> Part A",
+    figures: docs("guide-figures"),
+    footer: "RosterME — How to use it &middot; v1.0 &middot; The Mood &amp; Mind Centre",
+  },
+};
 
 /* ---------- a small markdown subset: exactly what the policy uses ---------- */
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// **bold**, `code`, and nothing else — the source is deliberately plain
+// **bold**, *italic*, `code`, and nothing else — the source is deliberately
+// plain. Bold runs first, so the asterisks left for italics are unambiguous.
 const inline = (s) =>
   esc(s)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+?)\*/g, "<em>$1</em>")
     .replace(/`(.+?)`/g, "<code>$1</code>");
 
-function render(md) {
+function render(md, figs = {}) {
   const lines = md.split("\n");
   const out = [];
   let i = 0;
@@ -41,6 +64,28 @@ function render(md) {
 
     // horizontal rule
     if (/^---+$/.test(line.trim())) { out.push('<hr class="rule">'); i++; continue; }
+
+    // figure: !fig[name|w=54]  — width is a percentage of the text column
+    const fig = line.match(/^!fig\[([\w-]+)(?:\|w=(\d+))?\]\s*$/);
+    if (fig) {
+      const [, name, w] = fig;
+      if (!figs[name]) throw new Error(`figure "${name}" not found — run guide-shots.mjs`);
+      out.push(
+        `<figure class="shot" style="width:${w ?? 100}%">` +
+          `<img src="${figs[name]}" alt="">` +
+        `</figure>`,
+      );
+      i++;
+      continue;
+    }
+
+    // callout: a > blockquote, used for the things people get wrong
+    if (/^>\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^>\s?/, ""));
+      out.push(`<div class="callout">${render(buf.join("\n"), figs)}</div>`);
+      continue;
+    }
 
     // table: header row, separator, then body until a non-pipe line
     if (line.trim().startsWith("|") && isTableSep(lines[i + 1] ?? "")) {
@@ -65,7 +110,9 @@ function render(md) {
     const h = line.match(/^(#{1,4})\s+(.*)$/);
     if (h) {
       const lvl = h[1].length;
-      out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`);
+      // a top-level heading is a Part, and Parts start on a fresh page so the
+      // staff half can be handed out without the administrator half attached
+      out.push(lvl === 1 ? `<h1 class="part">${inline(h[2])}</h1>` : `<h${lvl}>${inline(h[2])}</h${lvl}>`);
       i++;
       continue;
     }
@@ -120,7 +167,7 @@ function render(md) {
 
     // paragraph — join until blank line
     let p = line.trim();
-    while (i + 1 < lines.length && !/^\s*$/.test(lines[i + 1]) && !/^[#|-]/.test(lines[i + 1])) {
+    while (i + 1 < lines.length && !/^\s*$/.test(lines[i + 1]) && !/^[#|>-]/.test(lines[i + 1]) && !/^!fig\[/.test(lines[i + 1])) {
       p += " " + lines[++i].trim();
     }
     out.push(`<p>${inline(p)}</p>`);
@@ -193,54 +240,109 @@ const CSS = `
 
   /* keep a heading with the block that follows it */
   h2 + p, h2 + table, h2 + ol, h3 + p, h3 + table, h3 + ol { break-before: avoid; page-break-before: avoid; }
+
+  /* Parts start their own page, so Part A can be handed out on its own */
+  h1.part {
+    break-before: page; page-break-before: always;
+    font-size: 17pt; color: #fff; background: var(--brand);
+    margin: 0 0 14pt; padding: 9pt 12pt; border-radius: 3pt;
+    letter-spacing: -0.2pt;
+  }
+  h1.part:first-of-type { break-before: avoid; page-break-before: avoid; }
+
+  /* screenshots — bordered so a white app screen reads as a figure and not
+     as a hole in the page */
+  figure.shot {
+    margin: 9pt 0 12pt; padding: 0;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  figure.shot img {
+    display: block; width: 100%; height: auto;
+    /* never taller than the printable area, or it is silently clipped */
+    max-height: 225mm; object-fit: contain;
+    border: 0.75pt solid var(--line); border-radius: 4pt;
+    box-shadow: 0 1pt 4pt rgba(27,36,31,0.10);
+  }
+
+  .callout {
+    background: var(--wash); border-left: 2.5pt solid var(--brand);
+    padding: 8pt 11pt; margin: 8pt 0 11pt; border-radius: 0 3pt 3pt 0;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout p { font-size: 9.5pt; }
 `;
 
-const md = await readFile(SRC, "utf8");
+/* ---------- build ---------- */
 
-// The markdown title block becomes the masthead; the body starts at "## 1.".
-// The document-control table is taken line by line — slicing to the first
-// "---" instead lands inside the table's own |---|---| separator row.
-const bodyMd = md.slice(md.indexOf("## 1."));
+async function loadFigures(dir) {
+  if (!dir) return {};
+  const figs = {};
+  for (const f of await readdir(dir)) {
+    if (extname(f) !== ".png") continue;
+    const b64 = (await readFile(`${dir}/${f}`)).toString("base64");
+    figs[basename(f, ".png")] = `data:image/png;base64,${b64}`;
+  }
+  return figs;
+}
 
-const allLines = md.split("\n");
-const metaStart = allLines.findIndex((l) => l.trim().startsWith("| |"));
-let metaEnd = metaStart;
-while (metaEnd < allLines.length && allLines[metaEnd].trim().startsWith("|")) metaEnd++;
-const metaMd = allLines.slice(metaStart, metaEnd).join("\n");
-if (metaStart < 0 || metaEnd - metaStart < 3) throw new Error("document-control table not found");
+async function build(key, browser) {
+  const d = DOCS[key];
+  const md = await readFile(d.src, "utf8");
+  const figs = await loadFigures(d.figures);
 
-const html = `<!doctype html><meta charset="utf-8"><style>${CSS}</style>
+  const body = md.slice(md.indexOf(d.bodyFrom));
+
+  // The document-control table is taken line by line — slicing to the first
+  // "---" instead lands inside the table's own |---|---| separator row.
+  const all = md.split("\n");
+  const from = all.findIndex((l) => l.trim().startsWith("| |"));
+  let to = from;
+  while (to < all.length && all[to].trim().startsWith("|")) to++;
+  if (from < 0 || to - from < 3) throw new Error(`${key}: document-control table not found`);
+  const meta = all.slice(from, to).join("\n");
+
+  const html = `<!doctype html><meta charset="utf-8"><style>${CSS}</style>
 <div class="masthead">
   <div class="org">The Mood &amp; Mind Centre</div>
-  <h1>Staff Rostering System (RosterME)</h1>
-  <div class="sub">Access, Administration and Use &middot; Policy and Procedure</div>
+  <h1>${d.title}</h1>
+  <div class="sub">${d.sub}</div>
 </div>
-${render(metaMd)}
-${render(bodyMd)}`;
+${render(meta, figs)}
+${render(body, figs)}`;
 
-// keeping the intermediate HTML makes the layout reviewable without a PDF viewer
-if (process.env.KEEP_HTML) await (await import("node:fs/promises")).writeFile(process.env.KEEP_HTML, html);
+  if (process.env.KEEP_HTML) {
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(`${process.env.KEEP_HTML}/${key}.html`, html);
+  }
+
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: "load" });
+  await page.pdf({
+    path: d.out,
+    format: "A4",
+    printBackground: true,
+    margin: { top: "20mm", bottom: "18mm", left: "16mm", right: "16mm" },
+    displayHeaderFooter: true,
+    headerTemplate: `<div style="width:100%;font-size:7pt;color:#9aa8a2;
+      font-family:Helvetica,Arial,sans-serif;padding:0 16mm;">
+      <span style="float:right">The Mood &amp; Mind Centre</span></div>`,
+    footerTemplate: `<div style="width:100%;font-size:7pt;color:#9aa8a2;
+      font-family:Helvetica,Arial,sans-serif;padding:0 16mm;
+      border-top:0.5pt solid #d9e2dd;padding-top:4pt;">
+      <span>${d.footer}</span>
+      <span style="float:right">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+      </div>`,
+  });
+  await page.close();
+  const { size } = await stat(d.out);
+  console.log(`${d.out}  ${(size / 1024).toFixed(0)} kB`);
+}
+
+const which = process.argv[2] ?? "all";
+const keys = which === "all" ? Object.keys(DOCS) : [which];
+for (const k of keys) if (!DOCS[k]) throw new Error(`unknown document "${k}" — try: ${Object.keys(DOCS).join(", ")} or all`);
 
 const browser = await chromium.launch({ executablePath: CHROME });
-const page = await browser.newPage();
-await page.setContent(html, { waitUntil: "load" });
-await page.pdf({
-  path: OUT,
-  format: "A4",
-  printBackground: true,
-  margin: { top: "20mm", bottom: "18mm", left: "16mm", right: "16mm" },
-  displayHeaderFooter: true,
-  headerTemplate: `<div style="width:100%;font-size:7pt;color:#9aa8a2;
-    font-family:Helvetica,Arial,sans-serif;padding:0 16mm;">
-    <span style="float:right">The Mood &amp; Mind Centre</span></div>`,
-  footerTemplate: `<div style="width:100%;font-size:7pt;color:#9aa8a2;
-    font-family:Helvetica,Arial,sans-serif;padding:0 16mm;
-    border-top:0.5pt solid #d9e2dd;padding-top:4pt;">
-    <span>RosterME — Policy and Procedure &middot; v1.0 &middot; Effective 31 July 2026</span>
-    <span style="float:right">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-    </div>`,
-});
+for (const k of keys) await build(k, browser);
 await browser.close();
-
-const { size } = await stat(OUT);
-console.log(`${OUT}  ${(size / 1024).toFixed(0)} kB`);
