@@ -71,6 +71,11 @@ export default function Calendar({ me, notify, onNavigate }) {
     return m;
   }, [data]);
 
+  // Team roster is an explicit, per-day choice — picking a new day always
+  // starts back on the viewer's own shifts rather than carrying "Team
+  // roster" forward from whichever day they last looked at.
+  useEffect(() => setScope("mine"), [selected]);
+
   const awayByDate = (date) =>
     data.unavailability.filter((u) => u.start_date <= date && u.end_date >= date);
 
