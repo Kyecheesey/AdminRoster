@@ -291,10 +291,23 @@ const SHIFT_SELECT = `*,
   role:roles(name),
   staff:staff(id, name)`;
 
+// swap_offers now points at shift_instances twice (the offered shift and the
+// return shift), so both embeds must name their constraint explicitly.
 const OFFER_SELECT = `*,
-  shift:shift_instances(*, location:locations(name), role:roles(name)),
+  shift:shift_instances!swap_offers_shift_instance_id_fkey(*, location:locations(name), role:roles(name)),
+  return_shift:shift_instances!swap_offers_return_shift_instance_id_fkey(*, location:locations(name), role:roles(name)),
   offerer:staff!swap_offers_offered_by_fkey(id, name),
   acceptor:staff!swap_offers_accepted_by_fkey(id, name)`;
+
+function shiftMinutes(s: { start_time: string; end_time: string }): number {
+  const [sh, sm] = s.start_time.split(":").map(Number);
+  const [eh, em] = s.end_time.split(":").map(Number);
+  return eh * 60 + em - (sh * 60 + sm);
+}
+
+function fmtHours(mins: number): string {
+  return `${Math.round(mins / 6) / 10}h`;
+}
 
 // unavailability points at staff twice — once for whose time off it is, and
 // once for the admin who reviewed it. PostgREST refuses to guess between two
@@ -518,8 +531,12 @@ Deno.serve(async (req: Request) => {
       const target = me.adm && url.searchParams.get("staffId")
         ? url.searchParams.get("staffId")! : me.sid;
       const all = me.adm && url.searchParams.get("all") === "1";
+      const start = url.searchParams.get("start");
+      const end = url.searchParams.get("end");
       let q = supabase.from("availability").select("*, staff:staff(id, name)")
-        .eq("org_id", me.oid).order("day_of_week");
+        .eq("org_id", me.oid).order("avail_date");
+      if (start) q = q.gte("avail_date", start);
+      if (end) q = q.lte("avail_date", end);
       if (!all) q = q.eq("staff_id", target);
       const { data, error } = await q;
       if (error) throw error;
@@ -529,12 +546,18 @@ Deno.serve(async (req: Request) => {
     if (path === "/availability" && req.method === "POST") {
       const target = me.adm && body.staffId ? body.staffId : me.sid;
       const days = (body.days ?? []) as Array<{
-        day_of_week: number; is_available: boolean;
+        avail_date: string; is_available: boolean;
         available_from: string | null; available_to: string | null; note: string | null;
       }>;
-      const rows = days.map((d) => ({ ...d, staff_id: target, org_id: me.oid, updated_at: new Date().toISOString() }));
+      if (days.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d.avail_date ?? ""))) {
+        return json({ error: "Each day needs a date (YYYY-MM-DD)" }, 400);
+      }
+      const rows = days.map((d) => ({
+        ...d, day_of_week: toDow(d.avail_date), staff_id: target, org_id: me.oid,
+        updated_at: new Date().toISOString(),
+      }));
       const { error } = await supabase
-        .from("availability").upsert(rows, { onConflict: "staff_id,day_of_week" });
+        .from("availability").upsert(rows, { onConflict: "staff_id,avail_date" });
       if (error) throw error;
       return json({ ok: true });
     }
@@ -628,8 +651,37 @@ Deno.serve(async (req: Request) => {
       if (action === "accept") {
         if (offer.status !== "open") return json({ error: "Offer is not open" }, 409);
         if (offer.offered_by === me.sid) return json({ error: "You cannot accept your own offer" }, 400);
+        const { returnShiftInstanceId } = body;
+        if (!returnShiftInstanceId) {
+          return json({ error: "Pick one of your own shifts to give in return — swaps must be shift for shift." }, 400);
+        }
+        const [{ data: offered }, { data: ret }] = await Promise.all([
+          supabase.from("shift_instances").select("*").eq("id", offer.shift_instance_id).single(),
+          supabase.from("shift_instances").select("*").eq("id", returnShiftInstanceId).eq("org_id", me.oid).single(),
+        ]);
+        if (!offered) return json({ error: "The offered shift no longer exists" }, 404);
+        if (!ret) return json({ error: "Your return shift could not be found" }, 404);
+        if (ret.staff_id !== me.sid) return json({ error: "You can only give back one of your own shifts" }, 403);
+        if (ret.status === "cancelled") return json({ error: "That shift has been cancelled" }, 400);
+        if (ret.shift_date < new Date().toISOString().slice(0, 10)) {
+          return json({ error: "You cannot give back a past shift" }, 400);
+        }
+        const { data: retOffers } = await supabase.from("swap_offers")
+          .select("id").eq("shift_instance_id", ret.id).in("status", ["open", "pending_approval"]);
+        if (retOffers?.length) return json({ error: "Your shift already has an active offer of its own" }, 409);
+        const om = shiftMinutes(offered);
+        const rm = shiftMinutes(ret);
+        if (om !== rm) {
+          return json({
+            error: `Swap denied: this shift is ${fmtHours(om)} but yours is ${fmtHours(rm)}. ` +
+              `Swaps must be for the same hours so it doesn't change your rostered hours.`,
+          }, 400);
+        }
         const { error } = await supabase.from("swap_offers")
-          .update({ accepted_by: me.sid, status: "pending_approval", updated_at: now })
+          .update({
+            accepted_by: me.sid, return_shift_instance_id: ret.id,
+            status: "pending_approval", updated_at: now,
+          })
           .eq("id", id).eq("status", "open");
         if (error) throw error;
         return json({ ok: true });
@@ -652,14 +704,80 @@ Deno.serve(async (req: Request) => {
         if (offer.status !== "pending_approval" || !offer.accepted_by) {
           return json({ error: "Offer has no accepted taker yet" }, 409);
         }
-        const { error: shiftErr } = await supabase.from("shift_instances")
-          .update({ staff_id: offer.accepted_by, status: "swapped" })
-          .eq("id", offer.shift_instance_id);
-        if (shiftErr) {
-          if (String(shiftErr.code) === "23505") {
-            return json({ error: "The taker already has a shift starting at the same time that day." }, 409);
+        const [{ data: a }, { data: b }] = await Promise.all([
+          supabase.from("shift_instances").select("*").eq("id", offer.shift_instance_id).single(),
+          offer.return_shift_instance_id
+            ? supabase.from("shift_instances").select("*").eq("id", offer.return_shift_instance_id).single()
+            : Promise.resolve({ data: null }),
+        ]);
+        if (!a) return json({ error: "The offered shift no longer exists" }, 409);
+
+        if (b) {
+          // shift-for-shift swap: the offered shift and the return shift trade holders
+          if (a.staff_id !== offer.offered_by || b.staff_id !== offer.accepted_by) {
+            return json({ error: "One of the shifts has changed hands since the offer was accepted." }, 409);
           }
-          throw shiftErr;
+          if (shiftMinutes(a) !== shiftMinutes(b)) {
+            return json({
+              error: `Swap denied: the shifts are ${fmtHours(shiftMinutes(a))} and ${fmtHours(shiftMinutes(b))} — ` +
+                `they must be the same hours so rostered hours aren't changed.`,
+            }, 409);
+          }
+          if (a.shift_date === b.shift_date && a.start_time === b.start_time) {
+            // both work the same slot (e.g. different locations): trade the shift
+            // contents instead of the holders to avoid colliding on the unique key
+            const [ra, rb] = await Promise.all([
+              supabase.from("shift_instances")
+                .update({ template_id: b.template_id, end_time: b.end_time, location_id: b.location_id, role_id: b.role_id, status: "swapped" })
+                .eq("id", a.id),
+              supabase.from("shift_instances")
+                .update({ template_id: a.template_id, end_time: a.end_time, location_id: a.location_id, role_id: a.role_id, status: "swapped" })
+                .eq("id", b.id),
+            ]);
+            if (ra.error || rb.error) throw ra.error ?? rb.error;
+          } else {
+            const [ca, cb] = await Promise.all([
+              supabase.from("shift_instances").select("id")
+                .eq("staff_id", offer.accepted_by).eq("shift_date", a.shift_date)
+                .eq("start_time", a.start_time).neq("id", b.id),
+              supabase.from("shift_instances").select("id")
+                .eq("staff_id", offer.offered_by).eq("shift_date", b.shift_date)
+                .eq("start_time", b.start_time).neq("id", a.id),
+            ]);
+            if (ca.data?.length || cb.data?.length) {
+              return json({ error: "One of them already has a shift starting at the same time that day." }, 409);
+            }
+            const { error: eA } = await supabase.from("shift_instances")
+              .update({ staff_id: offer.accepted_by, status: "swapped" }).eq("id", a.id);
+            if (eA) {
+              if (String(eA.code) === "23505") {
+                return json({ error: "The taker already has a shift starting at the same time that day." }, 409);
+              }
+              throw eA;
+            }
+            const { error: eB } = await supabase.from("shift_instances")
+              .update({ staff_id: offer.offered_by, status: "swapped" }).eq("id", b.id);
+            if (eB) {
+              // put the first shift back so the roster isn't left half-swapped
+              await supabase.from("shift_instances")
+                .update({ staff_id: offer.offered_by, status: a.status }).eq("id", a.id);
+              if (String(eB.code) === "23505") {
+                return json({ error: "The offerer already has a shift starting at the same time that day." }, 409);
+              }
+              throw eB;
+            }
+          }
+        } else {
+          // legacy offer with no return shift: just hand the shift over
+          const { error: shiftErr } = await supabase.from("shift_instances")
+            .update({ staff_id: offer.accepted_by, status: "swapped" })
+            .eq("id", offer.shift_instance_id);
+          if (shiftErr) {
+            if (String(shiftErr.code) === "23505") {
+              return json({ error: "The taker already has a shift starting at the same time that day." }, 409);
+            }
+            throw shiftErr;
+          }
         }
         const { error } = await supabase.from("swap_offers")
           .update({ status: "approved", admin_note: body.note ?? null, updated_at: now })

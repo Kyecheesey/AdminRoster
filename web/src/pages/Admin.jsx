@@ -402,6 +402,16 @@ export default function Admin({ me, notify, onLogout }) {
       .catch((e) => notify(e.message, "error"));
   };
 
+  const setHours = (s) => {
+    const input = prompt(`Contracted hours per week for ${s.name}:`, s.contract_hours);
+    if (input === null || input.trim() === "") return;
+    const hours = Number(input);
+    if (!Number.isFinite(hours) || hours < 0 || hours > 168) return notify("Enter a valid number of hours.", "error");
+    api("/admin/staff", { method: "POST", body: { id: s.id, contract_hours: hours } })
+      .then(() => { notify(`${s.name} is now contracted for ${hours}h.`, "success"); load(); })
+      .catch((e) => notify(e.message, "error"));
+  };
+
   const toggleActive = (s) => {
     api("/admin/staff", { method: "POST", body: { id: s.id, active: !s.active } })
       .then(load)
@@ -715,6 +725,7 @@ export default function Admin({ me, notify, onLogout }) {
                 Rostered {weeklyHours(s.id)}h / contract {s.contract_hours}h
               </div>
             </div>
+            <button className="btn small secondary" onClick={() => setHours(s)}>Hours</button>
             <button className="btn small secondary" onClick={() => resetPin(s)}>PIN</button>
             {s.id !== me.id && (
               <button className="btn small secondary" onClick={() => toggleActive(s)}>

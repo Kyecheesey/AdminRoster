@@ -1058,6 +1058,7 @@ select { cursor: pointer; }
 }
 .offer-shift-pick:hover { border-color: var(--brand-light); }
 .offer-shift-pick:active { transform: scale(0.98); }
+.offer-shift-pick:disabled { cursor: not-allowed; transform: none; }
 .offer-shift-pick.selected { border-color: var(--brand); background: var(--brand-soft); }
 .offer-shift-pick strong { font-weight: 800; }
 .offer-shift-pick .sub { color: var(--muted); font-weight: 600; font-size: 13px; }
