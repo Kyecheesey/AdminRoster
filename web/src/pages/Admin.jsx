@@ -262,7 +262,7 @@ export default function Admin({ me, notify, onLogout }) {
   const [template, setTemplate] = useState(null);
   const [availability, setAvailability] = useState([]);
   const [editing, setEditing] = useState(null); // shift editor payload, or null
-  const [staffForm, setStaffForm] = useState({ name: "", pin: "", contract_hours: 0 });
+  const [staffForm, setStaffForm] = useState({ name: "", pin: "", contract_hours: 0, email: "" });
   const [busy, setBusy] = useState(false);
   const [orgs, setOrgs] = useState(null); // platform-admin org directory
   const [orgForm, setOrgForm] = useState({ name: "", short_name: "", domain: "", adminName: "", adminPin: "" });
@@ -402,6 +402,24 @@ export default function Admin({ me, notify, onLogout }) {
       .catch((e) => notify(e.message, "error"));
   };
 
+  const setEmail = (s) => {
+    const input = prompt(`Email address for ${s.name} (blank to remove):`, s.email || "");
+    if (input === null) return;
+    api("/admin/staff", { method: "POST", body: { id: s.id, email: input.trim() } })
+      .then(() => { notify(input.trim() ? `${s.name} will now get roster emails.` : `Email removed for ${s.name}.`, "success"); load(); })
+      .catch((e) => notify(e.message, "error"));
+  };
+
+  const setRate = (r) => {
+    const input = prompt(`Hourly rate for ${r.name} ($/h):`, r.hourly_rate || "");
+    if (input === null || input.trim() === "") return;
+    const rate = Number(input);
+    if (!Number.isFinite(rate) || rate < 0) return notify("Enter a valid hourly rate.", "error");
+    api("/admin/roles", { method: "POST", body: { id: r.id, hourly_rate: rate } })
+      .then(() => { notify(`${r.name} is now $${rate}/h.`, "success"); load(); })
+      .catch((e) => notify(e.message, "error"));
+  };
+
   const setHours = (s) => {
     const input = prompt(`Contracted hours per week for ${s.name}:`, s.contract_hours);
     if (input === null || input.trim() === "") return;
@@ -423,7 +441,7 @@ export default function Admin({ me, notify, onLogout }) {
     api("/admin/staff", { method: "POST", body: { ...staffForm, contract_hours: Number(staffForm.contract_hours) } })
       .then(() => {
         notify(`${staffForm.name} added.`, "success");
-        setStaffForm({ name: "", pin: "", contract_hours: 0 });
+        setStaffForm({ name: "", pin: "", contract_hours: 0, email: "" });
         load();
       })
       .catch((e) => notify(e.message, "error"));
@@ -442,6 +460,13 @@ export default function Admin({ me, notify, onLogout }) {
   );
   const activeStaff = meta?.staff.filter((s) => s.active) ?? [];
   const pendingTimeOff = (timeOff ?? []).filter((u) => u.status === "pending").length;
+
+  // estimated wage cost per week: template hours × the role's hourly rate
+  const rateOf = Object.fromEntries((meta?.roles ?? []).map((r) => [r.id, Number(r.hourly_rate) || 0]));
+  const anyRates = Object.values(rateOf).some((r) => r > 0);
+  const costPerWeek = (template ?? []).reduce(
+    (acc, t) => acc + hoursBetween(hm(t.start_time), hm(t.end_time)) * (rateOf[t.role_id] ?? 0), 0,
+  );
 
   // Admin is one long page by nature — six sections deep. These chips keep every
   // one of them a tap away instead of a scroll hunt.
@@ -489,6 +514,10 @@ export default function Admin({ me, notify, onLogout }) {
         <div className="stat">
           <div className="v">{activeStaff.length || "–"}</div>
           <div className="l">Active staff</div>
+        </div>
+        <div className="stat">
+          <div className="v">{anyRates ? `$${Math.round(costPerWeek).toLocaleString()}` : "–"}</div>
+          <div className="l">Est. cost / wk</div>
         </div>
       </div>
 
@@ -646,6 +675,30 @@ export default function Admin({ me, notify, onLogout }) {
         ))}
       </div>
 
+      <div className="card">
+        <p className="mini-label">Pay rates &amp; wage cost</p>
+        {meta?.roles.map((r) => (
+          <div className="list-row" key={r.id}>
+            <div className="grow">
+              <strong>{r.name}</strong>
+              <div className="sub">
+                {Number(r.hourly_rate) > 0 ? `$${r.hourly_rate}/h` : "No rate set"}
+                {Number(r.hourly_rate) > 0 &&
+                  ` · ~$${Math.round((template ?? [])
+                    .filter((t) => t.role_id === r.id)
+                    .reduce((a, t) => a + hoursBetween(hm(t.start_time), hm(t.end_time)), 0) * Number(r.hourly_rate)).toLocaleString()}/wk`}
+              </div>
+            </div>
+            <button className="btn small secondary" onClick={() => setRate(r)}>Rate</button>
+          </div>
+        ))}
+        <p className="sub" style={{ marginTop: 8 }}>
+          {anyRates
+            ? `Estimated roster cost: $${Math.round(costPerWeek).toLocaleString()}/week · $${Math.round(costPerWeek * 2).toLocaleString()}/fortnight (base rates, before penalties or super).`
+            : "Set an hourly rate on each role to see the estimated wage cost of the roster."}
+        </p>
+      </div>
+
       {(() => {
         const list = timeOff ?? [];
         const pending = list.filter((u) => u.status === "pending");
@@ -723,8 +776,10 @@ export default function Admin({ me, notify, onLogout }) {
               {!s.active && <span className="badge cancelled" style={{ marginLeft: 6 }}>Inactive</span>}
               <div className="sub">
                 Rostered {weeklyHours(s.id)}h / contract {s.contract_hours}h
+                {" · "}{s.email ? s.email : "no email — won't get notifications"}
               </div>
             </div>
+            <button className="btn small secondary" onClick={() => setEmail(s)}>Email</button>
             <button className="btn small secondary" onClick={() => setHours(s)}>Hours</button>
             <button className="btn small secondary" onClick={() => resetPin(s)}>PIN</button>
             {s.id !== me.id && (
@@ -757,6 +812,14 @@ export default function Admin({ me, notify, onLogout }) {
               id="st-hours" type="number" placeholder="0"
               value={staffForm.contract_hours}
               onChange={(e) => setStaffForm({ ...staffForm, contract_hours: e.target.value })}
+            />
+          </div>
+          <div className="full">
+            <label htmlFor="st-email">Email (optional, for roster notifications)</label>
+            <input
+              id="st-email" type="email" placeholder="name@example.com"
+              value={staffForm.email}
+              onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
             />
           </div>
           <div className="full">

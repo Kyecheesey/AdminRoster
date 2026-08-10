@@ -316,6 +316,58 @@ function fmtHours(mins: number): string {
 const UNAVAIL_SELECT = `*,
   staff:staff!unavailability_staff_id_fkey(id, name)`;
 
+/* ---------- email notifications (Resend) ----------
+ * Best-effort: a failed email must never fail the roster action it announces,
+ * so every send is wrapped and errors only reach the logs. The API key lives
+ * in Supabase Vault and is read via the service-role-only get_secret() RPC.
+ */
+
+const APP_URL = "https://adminroster.vercel.app";
+const MAIL_FROM = "RosterME <roster@kwinnovations.com.au>";
+
+let resendKey: string | null | undefined;
+async function getResendKey(): Promise<string | null> {
+  if (resendKey !== undefined) return resendKey;
+  const { data, error } = await supabase.rpc("get_secret", { secret_name: "resend_api_key" });
+  if (error) console.error("get_secret failed:", error);
+  resendKey = error ? null : ((data as string | null) ?? null);
+  return resendKey;
+}
+
+const esc = (s: unknown) =>
+  String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// one message per recipient so staff never see each other's addresses
+async function sendEmails(to: (string | null)[], subject: string, html: string) {
+  try {
+    const addresses = [...new Set(to.filter((a): a is string => Boolean(a && /.+@.+\..+/.test(a))))];
+    if (!addresses.length) return;
+    const key = await getResendKey();
+    if (!key) return;
+    const wrapped = `<div style="font-family:sans-serif;font-size:15px;color:#222">${html}
+      <p style="margin-top:18px"><a href="${APP_URL}" style="color:#0a7d55">Open RosterME</a></p></div>`;
+    const res = await fetch("https://api.resend.com/emails/batch", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(addresses.map((a) => ({ from: MAIL_FROM, to: [a], subject, html: wrapped }))),
+    });
+    if (!res.ok) console.error("Resend send failed:", res.status, await res.text());
+  } catch (e) {
+    console.error("Email send error:", e);
+  }
+}
+
+async function adminEmails(orgId: string, excludeStaffId?: string): Promise<(string | null)[]> {
+  const { data } = await supabase.from("staff").select("id, email")
+    .eq("org_id", orgId).eq("is_admin", true).eq("active", true);
+  return (data ?? []).filter((s) => s.id !== excludeStaffId).map((s) => s.email);
+}
+
+const fmtDay = (d: string) =>
+  new Date(d + "T00:00:00Z").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+const fmtSpan = (a: string, b: string) => a === b ? fmtDay(a) : `${fmtDay(a)} – ${fmtDay(b)}`;
+const hhmm = (t: string) => t.slice(0, 5);
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
@@ -498,7 +550,7 @@ Deno.serve(async (req: Request) => {
       const [locs, roles, staff] = await Promise.all([
         supabase.from("locations").select("*").eq("org_id", me.oid).order("name"),
         supabase.from("roles").select("*").eq("org_id", me.oid).order("name"),
-        supabase.from("staff").select("id, name, contract_hours, is_admin, active").eq("org_id", me.oid).order("name"),
+        supabase.from("staff").select("id, name, email, contract_hours, is_admin, active").eq("org_id", me.oid).order("name"),
       ]);
       if (locs.error || roles.error || staff.error) throw locs.error ?? roles.error ?? staff.error;
       return json({ locations: locs.data, roles: roles.data, staff: staff.data });
@@ -582,6 +634,14 @@ Deno.serve(async (req: Request) => {
         staff_id: target, org_id: me.oid, start_date, end_date, note, status: "pending",
       });
       if (error) throw error;
+      const { data: person } = await supabase.from("staff").select("name").eq("id", target).single();
+      await sendEmails(
+        await adminEmails(me.oid, target),
+        `Time off request — ${person?.name ?? "staff"}`,
+        `<p><strong>${esc(person?.name)}</strong> has requested time off for <strong>${fmtSpan(start_date, end_date)}</strong>.</p>` +
+          (note ? `<p>Reason: ${esc(note)}</p>` : "") +
+          `<p>Review it under Admin → Time off.</p>`,
+      );
       return json({ ok: true });
     }
 
@@ -589,15 +649,25 @@ Deno.serve(async (req: Request) => {
     if (uaReview && req.method === "POST") {
       if (!me.adm) return json({ error: "Admin only" }, 403);
       const [, id, action] = uaReview;
-      const { error } = await supabase.from("unavailability")
+      const { data: reviewed, error } = await supabase.from("unavailability")
         .update({
           status: action === "approve" ? "approved" : "denied",
           admin_note: body.note ?? null,
           reviewed_by: me.sid,
           reviewed_at: new Date().toISOString(),
         })
-        .eq("id", id).eq("org_id", me.oid);
+        .eq("id", id).eq("org_id", me.oid)
+        .select("start_date, end_date, staff:staff!unavailability_staff_id_fkey(name, email)")
+        .single();
       if (error) throw error;
+      const who = reviewed?.staff as { name?: string; email?: string | null } | null;
+      await sendEmails(
+        [who?.email ?? null],
+        `Time off ${action === "approve" ? "approved" : "declined"} — ${fmtSpan(reviewed.start_date, reviewed.end_date)}`,
+        `<p>Your time off for <strong>${fmtSpan(reviewed.start_date, reviewed.end_date)}</strong> has been ` +
+          `<strong>${action === "approve" ? "approved" : "declined"}</strong> by ${esc(me.name)}.</p>` +
+          (body.note ? `<p>Manager note: ${esc(body.note)}</p>` : ""),
+      );
       return json({ ok: true });
     }
 
@@ -637,6 +707,18 @@ Deno.serve(async (req: Request) => {
         shift_instance_id: shiftInstanceId, offered_by: shift.staff_id, org_id: me.oid, offer_note: note ?? null,
       });
       if (error) throw error;
+      const [{ data: offerer }, { data: others }] = await Promise.all([
+        supabase.from("staff").select("name").eq("id", shift.staff_id).single(),
+        supabase.from("staff").select("email").eq("org_id", me.oid).eq("active", true).neq("id", shift.staff_id),
+      ]);
+      await sendEmails(
+        (others ?? []).map((s) => s.email),
+        `Shift up for swap — ${fmtDay(shift.shift_date)}`,
+        `<p><strong>${esc(offerer?.name)}</strong> has offered their <strong>${fmtHours(shiftMinutes(shift))}</strong> shift ` +
+          `on <strong>${fmtDay(shift.shift_date)}</strong>, ${hhmm(shift.start_time)} – ${hhmm(shift.end_time)}, for swap.</p>` +
+          (note ? `<p>“${esc(note)}”</p>` : "") +
+          `<p>If you can take it, open Offers and give back one of your own shifts of the same length.</p>`,
+      );
       return json({ ok: true });
     }
 
@@ -684,6 +766,15 @@ Deno.serve(async (req: Request) => {
           })
           .eq("id", id).eq("status", "open");
         if (error) throw error;
+        const { data: offerName } = await supabase.from("staff").select("name").eq("id", offer.offered_by).single();
+        await sendEmails(
+          await adminEmails(me.oid),
+          `Swap awaiting approval — ${fmtDay(offered.shift_date)}`,
+          `<p><strong>${esc(me.name)}</strong> wants to take <strong>${esc(offerName?.name)}</strong>'s shift on ` +
+            `<strong>${fmtDay(offered.shift_date)}</strong> (${hhmm(offered.start_time)} – ${hhmm(offered.end_time)}), ` +
+            `giving back their shift on <strong>${fmtDay(ret.shift_date)}</strong> (${hhmm(ret.start_time)} – ${hhmm(ret.end_time)}).</p>` +
+            `<p>Both shifts are ${fmtHours(om)}. Approve or decline under Offers.</p>`,
+        );
         return json({ ok: true });
       }
 
@@ -783,6 +874,18 @@ Deno.serve(async (req: Request) => {
           .update({ status: "approved", admin_note: body.note ?? null, updated_at: now })
           .eq("id", id);
         if (error) throw error;
+        {
+          const { data: parties } = await supabase.from("staff").select("id, email")
+            .in("id", [offer.offered_by, offer.accepted_by]);
+          await sendEmails(
+            (parties ?? []).map((s) => s.email),
+            `Swap approved — ${fmtDay(a.shift_date)}`,
+            `<p>Your shift swap for <strong>${fmtDay(a.shift_date)}</strong> (${hhmm(a.start_time)} – ${hhmm(a.end_time)})` +
+              (b ? ` and <strong>${fmtDay(b.shift_date)}</strong> (${hhmm(b.start_time)} – ${hhmm(b.end_time)})` : "") +
+              ` has been <strong>approved</strong>. The roster has been updated.</p>` +
+              (body.note ? `<p>Manager note: ${esc(body.note)}</p>` : ""),
+          );
+        }
         return json({ ok: true });
       }
 
@@ -791,6 +894,20 @@ Deno.serve(async (req: Request) => {
           .update({ status: "rejected", admin_note: body.note ?? null, updated_at: now })
           .eq("id", id);
         if (error) throw error;
+        {
+          const ids = [offer.offered_by, offer.accepted_by].filter(Boolean);
+          const [{ data: parties }, { data: s }] = await Promise.all([
+            supabase.from("staff").select("id, email").in("id", ids),
+            supabase.from("shift_instances").select("shift_date, start_time, end_time").eq("id", offer.shift_instance_id).single(),
+          ]);
+          await sendEmails(
+            (parties ?? []).map((p) => p.email),
+            `Swap declined${s ? ` — ${fmtDay(s.shift_date)}` : ""}`,
+            `<p>The shift swap${s ? ` for <strong>${fmtDay(s.shift_date)}</strong> (${hhmm(s.start_time)} – ${hhmm(s.end_time)})` : ""}` +
+              ` has been <strong>declined</strong> by ${esc(me.name)}.</p>` +
+              (body.note ? `<p>Manager note: ${esc(body.note)}</p>` : ""),
+          );
+        }
         return json({ ok: true });
       }
     }
@@ -904,11 +1021,27 @@ Deno.serve(async (req: Request) => {
         return json({ ok: true });
       }
 
+      if (path === "/admin/roles" && req.method === "POST") {
+        const { id, hourly_rate } = body;
+        const rate = Number(hourly_rate);
+        if (!id || !Number.isFinite(rate) || rate < 0 || rate > 1000) {
+          return json({ error: "Enter a valid hourly rate" }, 400);
+        }
+        const { error } = await supabase.from("roles")
+          .update({ hourly_rate: rate }).eq("id", id).eq("org_id", me.oid);
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
       if (path === "/admin/staff" && req.method === "POST") {
-        const { id, name, contract_hours, is_admin, active, pin } = body;
+        const { id, name, contract_hours, is_admin, active, pin, email } = body;
         const patch: Record<string, unknown> = {};
         if (name !== undefined) patch.name = name;
         if (contract_hours !== undefined) patch.contract_hours = contract_hours;
+        if (email !== undefined) {
+          if (email && !/.+@.+\..+/.test(email)) return json({ error: "That email doesn't look right" }, 400);
+          patch.email = email || null;
+        }
         if (is_admin !== undefined) patch.is_admin = is_admin;
         if (active !== undefined) patch.active = active;
         if (pin !== undefined) {
