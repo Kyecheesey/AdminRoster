@@ -159,23 +159,35 @@ const slugify = (s: string) =>
 
 // Resolve which organisation a pre-login request is for: explicit ?org=slug,
 // else a custom ?host=domain match, else the earliest (primary) organisation.
+// Inactive organisations still resolve so callers can answer "offline" rather
+// than "no such workplace" — the caller must check `active` before serving.
 async function resolveOrg(url: URL) {
-  const cols = "id, slug, name, short_name, domain";
+  const cols = "id, slug, name, short_name, domain, active";
   const slug = url.searchParams.get("org");
   if (slug) {
     const { data } = await supabase.from("organisations").select(cols)
-      .eq("active", true).eq("slug", slug).maybeSingle();
+      .eq("slug", slug).maybeSingle();
     return data;
   }
   const host = url.searchParams.get("host");
   if (host) {
     const { data } = await supabase.from("organisations").select(cols)
-      .eq("active", true).eq("domain", host).maybeSingle();
+      .eq("domain", host).maybeSingle();
     if (data) return data;
   }
   const { data } = await supabase.from("organisations").select(cols)
-    .eq("active", true).order("created_at").limit(1).maybeSingle();
+    .order("created_at").limit(1).maybeSingle();
   return data;
+}
+
+// A workplace that has been switched off answers every request the same way,
+// with enough identity for the app to show a branded "<name> Offline" page.
+function offlineJson(org: { slug?: string; name?: string; short_name?: string } | null) {
+  return json({
+    error: `${org?.name ?? "This workplace"} is offline`,
+    offline: true,
+    org: org ? { slug: org.slug, name: org.name, short_name: org.short_name } : null,
+  }, 503);
 }
 
 // Materialise shift instances from a single org's fixed weekly template.
@@ -387,15 +399,16 @@ Deno.serve(async (req: Request) => {
       if (!q || !/^[a-z0-9][a-z0-9.\-]{0,80}$/.test(q)) {
         return json({ error: "Enter your workplace domain or code" }, 400);
       }
-      const cols = "id, slug, name, short_name, domain";
+      const cols = "id, slug, name, short_name, domain, active";
       let { data } = await supabase.from("organisations").select(cols)
-        .eq("active", true).eq("domain", q).maybeSingle();
+        .eq("domain", q).maybeSingle();
       if (!data) {
         const r = await supabase.from("organisations").select(cols)
-          .eq("active", true).eq("slug", q).maybeSingle();
+          .eq("slug", q).maybeSingle();
         data = r.data;
       }
       if (!data) return json({ error: "No workplace found for that address" }, 404);
+      if (!data.active) return offlineJson(data);
       return json({ org: data });
     }
 
@@ -409,11 +422,15 @@ Deno.serve(async (req: Request) => {
       }
       const { data: staff } = await supabase
         .from("staff")
-        .select("id, name, active, org:organisations(name, timezone)")
+        .select("id, name, active, org:organisations(name, timezone, active)")
         .eq("calendar_token", token)
         .maybeSingle();
       if (!staff || !staff.active) {
         return new Response("Calendar link not recognised", { status: 404, headers: CORS });
+      }
+      const feedOrg = staff.org as { name?: string; active?: boolean } | null;
+      if (!feedOrg?.active) {
+        return new Response(`${feedOrg?.name ?? "This workplace"} is offline`, { status: 503, headers: CORS });
       }
 
       // a window either side of today: enough history to be useful, enough
@@ -479,6 +496,7 @@ Deno.serve(async (req: Request) => {
     if (path === "/bootstrap" && req.method === "GET") {
       const org = await resolveOrg(url);
       if (!org) return json({ error: "Unknown workplace" }, 404);
+      if (!org.active) return offlineJson(org);
       const { data, error } = await supabase
         .from("staff").select("id, name").eq("active", true).eq("org_id", org.id).order("name");
       if (error) throw error;
@@ -490,9 +508,10 @@ Deno.serve(async (req: Request) => {
       if (!staffId || !pin) return json({ error: "Missing staffId or pin" }, 400);
       if (throttled(staffId)) return json({ error: "Too many attempts. Try again in 10 minutes." }, 429);
       const { data: staff, error } = await supabase
-        .from("staff").select("*, org:organisations(id, slug, name, short_name)")
+        .from("staff").select("*, org:organisations(id, slug, name, short_name, active)")
         .eq("id", staffId).eq("active", true).single();
       if (error || !staff?.pin_hash) return json({ error: "Invalid login" }, 401);
+      if (!staff.org?.active) return offlineJson(staff.org);
       const [salt, hash] = staff.pin_hash.split("$");
       if (await sha256Hex(`${salt}:${pin}`) !== hash) {
         recordFailure(staffId);
@@ -514,6 +533,13 @@ Deno.serve(async (req: Request) => {
     // ---------- authenticated ----------
     const me = await readSession(req);
     if (!me) return json({ error: "Not signed in" }, 401);
+
+    // A switched-off workplace is off for everyone with a live session too,
+    // not just at the sign-in door. Platform admins pass so they can bring
+    // the workplace back online from the Organisations panel.
+    const { data: myOrg } = await supabase.from("organisations")
+      .select("slug, name, short_name, active").eq("id", me.oid).maybeSingle();
+    if (!myOrg?.active && !me.padm) return offlineJson(myOrg);
 
     if (path === "/me" && req.method === "GET") {
       return json({ staff: { id: me.sid, name: me.name, isAdmin: me.adm, isPlatformAdmin: me.padm } });
@@ -922,6 +948,17 @@ Deno.serve(async (req: Request) => {
       const byOrg: Record<string, number> = {};
       for (const r of counts ?? []) byOrg[r.org_id] = (byOrg[r.org_id] ?? 0) + 1;
       return json({ organisations: (orgs ?? []).map((o) => ({ ...o, staff_count: byOrg[o.id] ?? 0 })) });
+    }
+
+    // Switch a workplace off (or back on). Off means off for everyone in it:
+    // sign-in, live sessions and calendar feeds all answer "<name> is offline".
+    if (path === "/platform/orgs" && req.method === "PUT") {
+      if (!me.padm) return json({ error: "Platform admin only" }, 403);
+      const { id, active } = body;
+      if (!id || typeof active !== "boolean") return json({ error: "id and active are required" }, 400);
+      const { error } = await supabase.from("organisations").update({ active }).eq("id", id);
+      if (error) throw error;
+      return json({ ok: true });
     }
 
     if (path === "/platform/orgs" && req.method === "POST") {

@@ -30,6 +30,16 @@ export async function api(path, { method = "GET", body } = {}) {
     window.location.reload();
     throw new Error("Signed out");
   }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    if (data.offline) {
+      err.offline = true;
+      err.org = data.org;
+      // let the app shell swap to the offline screen even when the failing
+      // call happened deep inside a page
+      window.dispatchEvent(new CustomEvent("org-offline", { detail: data.org }));
+    }
+    throw err;
+  }
   return data;
 }
