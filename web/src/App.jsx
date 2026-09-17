@@ -9,6 +9,7 @@ import Admin from "./pages/Admin.jsx";
 import Avatar from "./components/Avatar.jsx";
 import { LogoMark, OrgLogo, hasOrgLogo, orgTheme } from "./components/Logo.jsx";
 import { InstallLink, useInstall, IOSInstallSheet } from "./components/InstallPrompt.jsx";
+import OrgOffline from "./components/OrgOffline.jsx";
 import { AlertIcon, CheckIcon, InfoIcon } from "./components/Icons.jsx";
 
 const ICONS = {
@@ -155,6 +156,15 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [showPin, setShowPin] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [offline, setOffline] = useState(null); // workplace switched off mid-session
+
+  // api() announces an offline workplace globally, so a failing call anywhere
+  // in the app lands everyone on the same full-screen offline notice.
+  useEffect(() => {
+    const onOffline = (e) => setOffline(e.detail ?? {});
+    window.addEventListener("org-offline", onOffline);
+    return () => window.removeEventListener("org-offline", onOffline);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -173,6 +183,8 @@ export default function App() {
 
   // notify(msg) or notify(msg, "error" | "success" | "info")
   const notify = (msg, type = "info") => setToast((prev) => ({ msg, type, id: (prev?.id ?? 0) + 1 }));
+
+  if (offline) return <OrgOffline org={offline} />;
 
   if (!session) {
     return (

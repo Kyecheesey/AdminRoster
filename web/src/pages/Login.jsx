@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import Avatar from "../components/Avatar.jsx";
 import { LogoMark, OrgLogo, hasOrgLogo, orgTheme } from "../components/Logo.jsx";
+import OrgOffline from "../components/OrgOffline.jsx";
 import { InstallBanner } from "../components/InstallPrompt.jsx";
 import { AlertIcon, BackspaceIcon } from "../components/Icons.jsx";
 
@@ -24,12 +25,13 @@ export default function Login({ onLogin }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [offline, setOffline] = useState(null); // the workplace is switched off
 
   // 1. try to resolve the workplace from the current domain; otherwise ask for it
   useEffect(() => {
     api(`/resolve-org?q=${encodeURIComponent(window.location.hostname)}`)
       .then((d) => setOrg(d.org))
-      .catch(() => {})
+      .catch((e) => { if (e.offline) setOffline(e.org ?? {}); })
       .finally(() => setChecking(false));
   }, []);
 
@@ -47,7 +49,10 @@ export default function Login({ onLogin }) {
     setStaff(null);
     api(`/bootstrap?org=${encodeURIComponent(org.slug)}`)
       .then((d) => setStaff(d.staff))
-      .catch(() => setError("Could not load the staff list. Check your connection."));
+      .catch((e) => {
+        if (e.offline) setOffline(e.org ?? {});
+        else setError("Could not load the staff list. Check your connection.");
+      });
   }, [org]);
 
   // 3. auto-submit the PIN on the 4th digit
@@ -57,7 +62,8 @@ export default function Login({ onLogin }) {
     api("/login", { method: "POST", body: { staffId: picked.id, pin, org: org?.slug } })
       .then((d) => onLogin(d))
       .catch((e) => {
-        setError(e.message);
+        if (e.offline) setOffline(e.org ?? {});
+        else setError(e.message);
         setPin("");
       })
       .finally(() => setBusy(false));
@@ -70,7 +76,7 @@ export default function Login({ onLogin }) {
     setError("");
     api(`/resolve-org?q=${encodeURIComponent(q)}`)
       .then((d) => setOrg(d.org))
-      .catch((e) => setError(e.message))
+      .catch((e) => (e.offline ? setOffline(e.org ?? {}) : setError(e.message)))
       .finally(() => setBusy(false));
   };
 
@@ -85,6 +91,8 @@ export default function Login({ onLogin }) {
       <h1 className="wordmark">Roster<span>ME</span></h1>
     </>
   );
+
+  if (offline) return <OrgOffline org={offline} />;
 
   // --- step A: enter the workplace domain / code ---
   if (!org) {

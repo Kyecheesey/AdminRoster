@@ -320,6 +320,25 @@ export default function Admin({ me, notify, onLogout }) {
       .finally(() => setBusy(false));
   };
 
+  // Switch a workplace off (or back on). Off means nobody there can sign in
+  // and live sessions stop working — the app just says "<name> Offline".
+  const toggleOrg = (o) => {
+    if (
+      o.active &&
+      !confirm(
+        `Take ${o.name} offline?\n\nNobody there can sign in and open sessions stop working — everyone sees "${o.name} Offline" until it is brought back.`,
+      )
+    ) return;
+    setBusy(true);
+    api("/platform/orgs", { method: "PUT", body: { id: o.id, active: !o.active } })
+      .then(() => {
+        notify(o.active ? `${o.name} is now offline.` : `${o.name} is back online.`, "success");
+        loadOrgs();
+      })
+      .catch((e) => notify(e.message, "error"))
+      .finally(() => setBusy(false));
+  };
+
   // Copy a whole day's shifts onto another day — the fastest way to build a
   // week where most days look alike. Uses the normal add endpoint per shift, so
   // the same validation applies as if each were typed in by hand.
@@ -839,12 +858,18 @@ export default function Admin({ me, notify, onLogout }) {
               <div className="list-row" key={o.id}>
                 <span className="org-badge sm">{(o.short_name || o.name).slice(0, 3)}</span>
                 <div className="grow">
-                  <strong>{o.name}</strong>
+                  <strong>
+                    {o.name}
+                    {!o.active && <span className="badge cancelled" style={{ marginLeft: 6 }}>Offline</span>}
+                  </strong>
                   <div className="sub">
                     {o.staff_count} staff · code <code>{o.slug}</code>
                     {o.domain ? ` · ${o.domain}` : " · no custom domain"}
                   </div>
                 </div>
+                <button className="btn small secondary" onClick={() => toggleOrg(o)} disabled={busy}>
+                  {o.active ? "Take offline" : "Bring online"}
+                </button>
               </div>
             ))}
             <div className="org-add">

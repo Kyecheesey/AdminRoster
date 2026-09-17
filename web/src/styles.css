@@ -395,6 +395,12 @@ button { font-family: inherit; color: inherit; }
   box-shadow: 0 12px 30px rgba(0,0,0,0.28); animation: fade-up 0.4s ease both;
 }
 
+/* full-screen notice for a workplace that has been switched off */
+.offline-title {
+  color: #fff; font-size: 30px; font-weight: 800; letter-spacing: -0.5px;
+  margin: 4px 0 0; text-align: center; animation: fade-up 0.4s 0.05s ease both;
+}
+
 /* workplace chooser */
 .org-grid {
   display: grid; grid-template-columns: 1fr; gap: 11px;
